@@ -47,7 +47,7 @@ head(corpusfiles)
 
 Load and process data
 
-```{r ampobc_1_02, message=F, warning=F}
+```{r ampobc_1_02}
 # load and start processing corpus
 obc <- sapply(corpusfiles, function(x) {
   x <- textreadr::read_xml(x)
