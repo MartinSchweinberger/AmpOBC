@@ -8,10 +8,6 @@ bibliography: bibliography.bib
 link-citations: yes
 ---
 
-```{r uq1, echo=F, fig.cap="", message=FALSE, warning=FALSE, out.width='100%'}
-knitr::include_graphics("https://slcladal.github.io/images/isle6.png")
-```
-
 
 This document reports the analysis of the use of adjective amplifiers in British English based on the [Old Bailey Corpus (Version 2.0)](https://fedora.clarin-d.uni-saarland.de/oldbailey/).
 
@@ -21,13 +17,17 @@ We will now begin with the analysis. In a first step, the session is prepared by
 
 ```{r ampobc_1_01, message=F, warning=F}
 # load packages
-library(tidyverse)
-library(tidyr)
-library(knitr) 
-library(kableExtra) 
-library(DT)
-library(usethis)
-library(textreadr)
+library(tidyverse)  # data processing
+library(tidyr)      # data processing
+library(knitr)      # table vis
+library(kableExtra) # table vis
+library(DT)         # table vis
+library(usethis)    # git
+library(textreadr)  # reah xml
+library(textdata)   # sentiment analysis
+library(quanteda)   # concordancing
+library(hunspell)   # spelling
+library(udpipe)     # pos tagging
 # set options
 options(stringsAsFactors = F)
 options(scipen = 999)
@@ -61,31 +61,30 @@ obc <- sapply(corpusfiles, function(x) {
 str(obc)
 ```
 
+## Extract meta information{-}
 
-
-
-```{r ampobc_1_02, message=F, warning=F}
+```{r ampobc_1_03, message=F, warning=F}
 # extract file names
-file <- names(obc)
-file <- stringr::str_remove_all(file, ".*/")
-file <- gsub(".xml", "", file)
+File <- names(obc)
+File <- stringr::str_remove_all(File, ".*/")
+File <- gsub(".xml", "", File)
 # extract raw text
-text <- as.vector(unlist(obc))
+Text <- as.vector(unlist(obc))
 # extract date
-date <- stringr::str_extract_all(file, "POS-[0-9]{4,4}") %>%
+Date <- stringr::str_extract_all(File, "POS-[0-9]{4,4}") %>%
   stringr::str_remove_all("POS-")
 # clean text
-cleantext <- text %>%
+CleanText <- Text %>%
   stringr::str_remove_all(fixed("\\")) %>%
   stringr::str_remove_all("_[:graph:]") %>%
   tolower() %>%
   stringr::str_squish()
 # extract wordcount
-words <- stringr::str_count(cleantext, " ")+1
+words <- stringr::str_count(CleanText, " ")+1
 # create an id
 docname <- paste0("text", 1:length(Text))
 # combine elements into a data frame 
-obcdf <- data.frame(docname, file, date, text, cleantext, words)
+obcdf <- data.frame(docname, File, Date, Text, CleanText, words)
 # inspect
 nrow(obcdf)
 ```
@@ -95,17 +94,16 @@ Save data to disc
 ```{r ampobc_1_04, message=F, warning=F}
 # save data
 base::saveRDS(obcdf, file = here::here("data", "obcdf_raw.rda"))
-# reload .rda data
+# reload data
 obcdf  <- base::readRDS(file = here::here("data", "obcdf_raw.rda"))
 ```
 
 
 ## Concordancing{-}
 
-```{r ampobc_1_08, message=F, warning=F}
-library(quanteda)
+```{r ampobc_1_05, message=F, warning=F}
 # generate kwic
-concobc <- quanteda::kwic(obcdf$text, 
+concobc <- quanteda::kwic(obcdf$Text, 
                          pattern = "[:alnum:]{1,}_JJ[:alnum:]{0,3}", 
                          window = 15, 
                          valuetype = "regex") %>%
@@ -118,9 +116,9 @@ head(concobc)
 
 
 
-```{r ampobc_1_08, message=F, warning=F}
+```{r ampobc_1_06, message=F, warning=F}
 meta <- obcdf %>%
-  dplyr::select(docname, file, date, words)
+  dplyr::select(docname, File, Date, words)
 # combine meta and kwic
 ampobc <- dplyr::left_join(concobc, meta, by = "docname") %>%
   dplyr::mutate(id = 1:nrow(.))
@@ -128,21 +126,21 @@ ampobc <- dplyr::left_join(concobc, meta, by = "docname") %>%
 head(ampobc)
 ```
 
+Visualize distribution of files against `Date`
 
-
-```{r}
+```{r ampobc_1_07, message=F, warning=F}
 ampobc %>%
-  ggplot(aes(x = date)) + 
+  ggplot(aes(x = Date)) + 
   geom_histogram(stat="count")
 ```
 
 
 Save data to disc
 
-```{r ampobc_1_04, message=F, warning=F}
+```{r ampobc_1_08, message=F, warning=F}
 # save data
 base::saveRDS(ampobc, file = here::here("data", "ampobc_raw.rda"))
-# reload .rda data
+# reload data
 ampobc  <- base::readRDS(file = here::here("data", "ampobc_raw.rda"))
 ```
 
@@ -150,20 +148,20 @@ ampobc  <- base::readRDS(file = here::here("data", "ampobc_raw.rda"))
 
 ## Frequency{-}
 
-```{r ampobc_1_14, message=F, warning=F}
+```{r ampobc_1_09, message=F, warning=F}
 # code freq of adj type by date category
 ampobc <- ampobc %>%
   dplyr::mutate(adjective = tolower(keyword),
                 adjective = str_remove_all(adjective, "_.*"),
-                datecat = date %>%
+                Datecat = Date %>%
                   as.numeric()) %>%
-  dplyr::mutate(datecat = dplyr::case_when(datecat >= 1900 ~ "1900-1999",
-                                           datecat >= 1800 ~ "1800-1899",
-                                           datecat >= 1700 ~ "1700-1799",
+  dplyr::mutate(Datecat = dplyr::case_when(Datecat >= 1900 ~ "1900-1999",
+                                           Datecat >= 1800 ~ "1800-1899",
+                                           Datecat >= 1700 ~ "1700-1799",
                                            TRUE ~ "1600-1699")) %>%
-  dplyr::group_by(datecat, adjective) %>%
+  dplyr::group_by(Datecat, adjective) %>%
   dplyr::mutate(adjectiveN = n()) %>%
-  dplyr::group_by(datecat) %>%
+  dplyr::group_by(Datecat) %>%
   dplyr::mutate(adjectivesN = n()) %>%
   dplyr::mutate(frequency = round(adjectiveN/adjectivesN*1000, 5))
 # inspect
@@ -173,10 +171,10 @@ head(ampobc)
 
 Save data to disc
 
-```{r ampobc_1_04, message=F, warning=F}
+```{r ampobc_1_10, message=F, warning=F}
 # save data
 base::saveRDS(ampobc, file = here::here("data", "ampobc_semi.rda"))
-# reload .rda data
+# reload data
 ampobc  <- base::readRDS(file = here::here("data", "ampobc_semi.rda"))
 ```
 
@@ -184,7 +182,7 @@ ampobc  <- base::readRDS(file = here::here("data", "ampobc_semi.rda"))
 
 ## Syntactic Function{-}
 
-```{r ampobc_1_17, message=F, warning=F}
+```{r ampobc_1_11, message=F, warning=F}
 # determine function
 Function1 <- ampobc$post %>%
   stringr::str_squish() %>%
@@ -210,7 +208,7 @@ head(functiontb)
 
 not included: *quite*, *too*, and *well*.
 
-```{r ampobc_1_16, message=F, warning=F}
+```{r ampobc_1_12, message=F, warning=F}
 # define amplifiers 
 amplifiers <- c("absolutely", "actually", "aggressively", "amazingly", "appallingly", "awful", 
                 "awfully", "badly", "bloody", "certainly", "clearly", "complete", "dead", "completely", 
@@ -229,7 +227,7 @@ amplifiers <- c("absolutely", "actually", "aggressively", "amazingly", "appallin
 ```
 
 
-```{r ampobc_1_17, message=F, warning=F}
+```{r ampobc_1_13, message=F, warning=F}
 ampobc <- ampobc %>%
   dplyr::mutate(Function = dplyr::case_when(Function1 == "" | 
                                               Function1 == "Attributive" | 
@@ -249,7 +247,7 @@ head(ampobc)
 
 ## Code Priming{-}
 
-```{r ampobc_1_18, message=F, warning=F}
+```{r ampobc_1_14, message=F, warning=F}
 # code priming
 prim1 <- c(rep(0, 1), ampobc$Variant[1:length(ampobc$Variant)-1])
 prim2 <- c(rep(0, 2), ampobc$Variant[1:(length(ampobc$Variant)-2)])
@@ -260,7 +258,7 @@ head(primtb)
 ```
 
 
-```{r ampobc_1_18, message=F, warning=F}
+```{r ampobc_1_15, message=F, warning=F}
 ampobc$Priming <- as.vector(unlist(apply(primtb, 1, function(x){
   x <- ifelse(x[1]== "Zero" , "NoPrime",
               ifelse(x[1] == x[2] | x[1] == x[3] | x[1] == x[4], "Prime", "NoPrime"))
@@ -282,7 +280,7 @@ str(ampobc); head(ampobc); nrow(ampobc)
 
 ## Remove negated forms et al.{-}
 
-```{r ampobc_1_19, message=F, warning=F}
+```{r ampobc_1_16, message=F, warning=F}
 # find items to be removed
 supsidx <- unique(grep(paste(sups,collapse="|"), ampobc$pre, value=F))
 negsidx <- unique(grep(paste(negs,collapse="|"), ampobc$pre, value=F))
@@ -303,46 +301,26 @@ head(ampobc)
 
 Save data to disc
 
-```{r ampobc_1_04, message=F, warning=F}
+```{r ampobc_1_17, message=F, warning=F}
 # save data
 base::saveRDS(ampobc, file = here::here("data", "ampobc_woneg.rda"))
-# reload .rda data
+# reload data
 ampobc  <- base::readRDS(file = here::here("data", "ampobc_woneg.rda"))
 ```
 
-## Remove lexicalizations 
-
-Remove variants that were not intensified by at least 2 different amplifier variants
-
-> NOT EXECTUTED!
-
-```{r ampobc_1_21, message=F, warning=F, eval = F}
-nrow(ampobc)
-# remove items that were not intensified by a minimum of 2 intensifier variants
-pintadjtb <- table(ampobc$Adjective, ampobc$Variant)
-#pintadjtb <- pintadjtb[2:nrow(pintadjtb),]
-pintadjtb <- pintadjtb[,2:ncol(pintadjtb)]
-pintadjtb2 <- apply(pintadjtb, 1, function(x){
-  x <- ifelse(x > 1, 1, x)})
-pintadjtb3 <- colSums(pintadjtb2)
-pintadjschildes <- names(pintadjtb3)[which(pintadjtb3 >= 2)]
-ampobc <- ampobc[ampobc$Adjective %in% pintadjschildes, ]
-nrow(ampobc)
-```
 
 ## Remove misspelled forms {-}
 
-```{r ampobc_1_22, message=F, warning=F, eval = F}
+```{r ampobc_1_19, message=F, warning=F, eval = F}
 # inspect adjectives
 names(table(ampobc$adjective))[1:10]
 ```
 
 Remove words not in dictionary or words that consist only of 1 or 2 characters
 
-```{r ampobc_1_23, message=F, warning=F}
+```{r ampobc_1_20, message=F, warning=F}
 nrow(ampobc)
 # correct spelling
-library(hunspell)
 ampobc <- ampobc %>%
   dplyr::filter(hunspell_check(adjective)) %>%
   dplyr::filter(nchar(adjective) > 2)
@@ -354,15 +332,14 @@ head(ampobc); nrow(ampobc)
 
 ## Remove strange forms{-}
 
-```{r ampobc_1_24, message=F, warning=F}
+```{r ampobc_1_21, message=F, warning=F}
 # inspect adjectives
 names(table(ampobc$adjective))[1:10]
 ```
 
 Remove mistagged items
 
-```{r ampobc_1_25, message=F, warning=F}
-library(udpipe)
+```{r ampobc_1_22, message=F, warning=F}
 #model <- udpipe_download_model(language = "english")
 udmodel_english <- udpipe_load_model(file = here::here("english-ewt-ud-2.5-191206.udpipe"))
 udpipe_adjectives <- udpipe_annotate(udmodel_english, ampobc$adjective) %>%
@@ -373,7 +350,7 @@ udpipe_adjectives <- udpipe_annotate(udmodel_english, ampobc$adjective) %>%
 head(udpipe_adjectives)
 ```
 
-```{r ampobc_1_26, message=F, warning=F}
+```{r ampobc_1_23, message=F, warning=F}
 nrow(ampobc)
 ampobc <-ampobc %>%
   dplyr::filter(adjective %in% udpipe_adjectives)
@@ -384,7 +361,7 @@ nrow(ampobc)
 Remove adjectives that were never amplified
 
 
-```{r ampobc_1_27, message=F, warning=F}
+```{r ampobc_1_24, message=F, warning=F}
 amp_adjs <- ampobc %>%
   dplyr::filter(Amplified == 1) %>%
   dplyr::pull(adjective) %>%
@@ -395,7 +372,7 @@ head(amp_adjs)
 ```
 
 
-```{r ampobc_1_28, message=F, warning=F}
+```{r ampobc_1_25, message=F, warning=F}
 nrow(ampobc)
 ampobc <- ampobc %>%
   dplyr::filter(adjective %in% amp_adjs)
@@ -404,16 +381,16 @@ nrow(ampobc)
 
 Save data to disc
 
-```{r ampobc_1_04, message=F, warning=F}
+```{r ampobc_1_26, message=F, warning=F}
 # save data
 base::saveRDS(ampobc, file = here::here("data", "ampobc_clean.rda"))
-# reload .rda data
+# reload data
 ampobc  <- base::readRDS(file = here::here("data", "ampobc_clean.rda"))
 ```
 
 ## Gradability{-}
 
-```{r ampobc_1_30, message=F, warning=F}
+```{r ampobc_1_27, message=F, warning=F}
 # code gradability
 # load Gradability data (derived from COCA)
 gradability <- read.delim(here::here("data", "Gradability.txt"), sep = "\t", header = T, quote = "", skipNul = T)
@@ -446,7 +423,7 @@ Add semantic types [@tagliamonte2008intensifiers, @dixon1977adjectives]
 
 * other
 
-```{r ampobc_1_31, message=F, warning=F}
+```{r ampobc_1_28, message=F, warning=F}
 # load data
 code1 <- read.delim(here::here("data", "semcodecg1.txt"), sep = "\t", header = T, skipNul = T)
 code2 <- read.delim(here::here("data", "semcodedjm1.txt"), sep = "\t", header = T, skipNul = T)
@@ -479,7 +456,7 @@ colnames(semcode)[3:12] <- c("Dimension", "Difficulty", "PhysicalProperty", "Col
 ```
 
 
-```{r ampobc_1_32, message=F, warning=F}
+```{r ampobc_1_29, message=F, warning=F}
 # load package
 library(dplyr)
 AdjectiveSemantics <- semcode %>%
@@ -504,7 +481,7 @@ AdjectiveSemantics <- AdjectiveSemantics %>%
 summary(AdjectiveSemantics$Certainty)
 ```
 
-```{r ampobc_1_33, message=F, warning=F}
+```{r ampobc_1_30, message=F, warning=F}
 Age <- AdjectiveSemantics %>%
   dplyr::filter(Age != 0) %>%
   dplyr::pull(Adjective)
@@ -534,15 +511,15 @@ Value <- AdjectiveSemantics %>%
   dplyr::pull(Adjective)
 # add semantic category to data
 ampobc <- ampobc %>%
-  dplyr::mutate(SemanticCategory = dplyr::case_when(Adjective %in% Age ~ "Age",
-                                                    Adjective %in% Color ~ "Color",
-                                                    Adjective %in% Difficulty ~ "Difficulty",
-                                                    Adjective %in% Dimension ~ "Dimension",
-                                                    Adjective %in% HumanPropensity ~ "HumanPropensity",
-                                                    Adjective %in% PhysicalProperty ~ "PhysicalProperty",
-                                                    Adjective %in% Position ~ "Position",
-                                                    Adjective %in% Speed ~ "Speed",
-                                                    Adjective %in% Value ~ "Value", 
+  dplyr::mutate(SemanticCategory = dplyr::case_when(adjective %in% Age ~ "Age",
+                                                    adjective %in% Color ~ "Color",
+                                                    adjective %in% Difficulty ~ "Difficulty",
+                                                    adjective %in% Dimension ~ "Dimension",
+                                                    adjective %in% HumanPropensity ~ "HumanPropensity",
+                                                    adjective %in% PhysicalProperty ~ "PhysicalProperty",
+                                                    adjective %in% Position ~ "Position",
+                                                    adjective %in% Speed ~ "Speed",
+                                                    adjective %in% Value ~ "Value", 
                                                     TRUE ~ "Other"))
 # table sem class of tokens
 table(ampobc$SemanticCategory)
@@ -551,7 +528,7 @@ table(ampobc$SemanticCategory)
 
 ## Sentiment Analysis{-}
 
-```{r ampobc_1_34, message=F, warning=F}
+```{r ampobc_1_31, message=F, warning=F}
 # positive adjectives
 pos_adj <- tidytext::get_sentiments("nrc") %>%
   dplyr::filter(sentiment == "positive") %>%
@@ -562,8 +539,8 @@ neg_adj <- tidytext::get_sentiments("nrc") %>%
   dplyr::pull(word)
 # annotate emotionality
 ampobc <- ampobc %>%
-  dplyr::mutate(Emotionality = dplyr::case_when(Adjective %in% pos_adj ~ "positive",
-                                                Adjective %in% neg_adj ~ "negative",
+  dplyr::mutate(Emotionality = dplyr::case_when(adjective %in% pos_adj ~ "positive",
+                                                adjective %in% neg_adj ~ "negative",
                                                 TRUE ~ "neutral")) %>%
   dplyr::mutate(Emotionality = factor(Emotionality, levels = c("neutral", "negative", "positive")))
 # inspect
@@ -572,7 +549,7 @@ head(ampobc)
 
 ## Correct errors{-}
 
-```{r ampobc_1_35, message=F, warning=F}
+```{r ampobc_1_32, message=F, warning=F}
 ampobc %>%
   dplyr::filter(Variant == "so") %>%
   dplyr::group_by(Variant, Function) %>%
@@ -580,19 +557,19 @@ ampobc %>%
 ```
 
 
-```{r ampobc_1_36, message=F, warning=F}
+```{r ampobc_1_33, message=F, warning=F}
 ampobc <- ampobc %>%
   dplyr::mutate(Function = ifelse(Variant == "so" & Function == "Attributive", "Predicative", Function))
 ```
 
-```{r ampobc_1_37, message=F, warning=F}
+```{r ampobc_1_34, message=F, warning=F}
 ampobc %>%
   dplyr::filter(Variant == "so") %>%
   dplyr::group_by(Variant, Function) %>%
   dplyr::summarize(Frequency = n())
 ```
 
-```{r ampobc_1_38, message=F, warning=F}
+```{r ampobc_1_35, message=F, warning=F}
 # inspect data
 ampobc %>%
   head(10) %>%
@@ -604,7 +581,7 @@ ampobc %>%
 
 Save data to disc
 
-```{r ampobc_1_04, message=F, warning=F}
+```{r ampobc_1_36, message=F, warning=F}
 # save data
 base::saveRDS(ampobc, file = here::here("data", "ampobc_fullclean.rda"))
 ```
