@@ -1,2 +1,2 @@
 # AmpOBC
-Repo for the analysis of amplifiers in teh Old Bailey corpus
+Repo for the analysis of amplifiers in the Old Bailey corpus.
