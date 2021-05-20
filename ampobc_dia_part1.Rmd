@@ -1,5 +1,5 @@
 ---
-title: "On the waning of forms - a corpus-based analysis of losers in language change (Part 1)"
+title: "Analyzing change in the British English Adjective Amplifier System based on the Old Baily Corpus (Part 1)"
 author: "Martin Schweinberger"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:
@@ -13,17 +13,13 @@ knitr::include_graphics("https://slcladal.github.io/images/isle6.png")
 ```
 
 
-This document documents the analysis of the adjective amplifier *very* in New Zealand English. The analysis was performed with the aim of fitting a generalized-linear binomial logistic mixed-effects regression to explain which factors correlate with the use of *very* and to ascertain if 
-
-1. *very* is decreasing across apparent time 
-
-2. if the decrease of *very* is systematic or layered (which would imply that the use of very is stratified along linguistic and social lines) or unsystematic (which would imply that it correlates with few if any linguistic or social variables). 
+This document reports the analysis of the use of adjective amplifiers in British English based on the [Old Bailey Corpus (Version 2.0)](https://fedora.clarin-d.uni-saarland.de/oldbailey/).
 
 # Introduction
 
 We will now begin with the analysis. In a first step, the session is prepared by setting options and activating packages.
 
-```{r isle6_1_01, message=F, warning=F}
+```{r ampobc_1_01, message=F, warning=F}
 # load packages
 library(tidyverse)
 library(tidyr)
@@ -31,52 +27,63 @@ library(knitr)
 library(kableExtra) 
 library(DT)
 library(usethis)
+library(textreadr)
 # set options
 options(stringsAsFactors = F)
 options(scipen = 999)
 options(max.print=10000)
 # specify paths
-wscpath <- "D:\\Uni\\Korpora\\Original\\WSC"
-biowscpath <- "D:\\Uni\\Korpora\\Original\\WSC\\DOC/PTPNTS.txt"
-bioguidewsc <- "D:\\Uni\\Korpora\\Original\\WSC\\DOC/GUIDE.txt"
-biolinkwsc <- "D:\\Uni\\Korpora\\Original\\WSC\\DOC/LINK.txt"
-bioextractswsc <- "D:\\Uni\\Korpora\\Original\\WSC\\DOC/EXTRACTS.txt"
+corpuspath <- "D:\\Uni\\Korpora\\Original\\OldBaileyCorpus\\OldBaileyCorpus2\\OldBaileyCorpus2\\OBC2"
 # define corpus files
-corpusfiles = list.files(path = wscpath, pattern = ".TXT", all.files = T,
+corpusfiles = list.files(path = corpuspath, pattern = ".xml", all.files = T,
                          full.names = T, recursive = F, ignore.case = T, 
                          include.dirs = F)
+# for testing purposes we only use the first 5 files
+corpusfiles <- corpusfiles[1:5]
+```
+
+```{r ampobc_1_01b, message=F, warning=F}
+head(corpusfiles)
 ```
 
 # Data Processing
 
 Load and process data
 
-```{r isle6_1_02, message=F, warning=F}
+```{r ampobc_1_02, message=F, warning=F}
 # load and start processing corpus
-wsc <- sapply(corpusfiles, function(x) {
-  x <- scan(x, what = "char", sep = "", quote = "", quiet = T, skipNul = T)
-  x <- gsub(" {2,}", " ", x)
-  x <- stringr::str_trim(x, side = "both")
-  x <- paste(x, sep = " ", collapse = " ")
-  x <- strsplit(gsub("(<WSC#)", "~~~\\1", x), "~~~" )
-  x <- as.vector(unlist(x))
-  x <- x[2:length(x)]
+obc <- sapply(corpusfiles, function(x) {
+  x <- textreadr::read_xml(x)
+  x <- paste0(x, collapse = " ")
+  x <- stringr::str_remove_all(x, "\n")
+  x <- stringr::str_squish(x)
+  x <- stringr::str_replace_all(x, " ([:punct:])", "\\1")
 } ) 
-# extract number of text elements per file
-idx <- sapply(wsc, function(x) length(x))
+# inspect
+str(obc)
+```
+
+
+
+
+```{r ampobc_1_02, message=F, warning=F}
 # extract file names
-File <- names(wsc)
-File <- rep(File, idx)
-File <- gsub("D:\\Uni\\Korpora\\Original\\WSC/", "", File, fixed = T)
-File <- gsub(".TXT", "", File)
+File <- names(obc)
+File <- stringr::str_remove_all(File, ".*/")
+File <- gsub(".xml", "", File)
+File
+```
+
+
+```{r ampobc_1_02, message=F, warning=F}
 # extract speakers
-Speaker <- as.vector(unlist(sapply(wsc, function(x) {
+Speaker <- as.vector(unlist(sapply(obc, function(x) {
   x <- gsub(">.*", "", x)
   x <- gsub(".*#", "", x)
   x <- gsub(".*:", "", x)
   })))
 # extract raw text
-Text <- as.vector(unlist(sapply(wsc, function(x) {
+Text <- as.vector(unlist(sapply(obc, function(x) {
   x <- gsub("<[A-Z]{1,}#[A-Z]{1,}[0-9]{1,}:[0-9]{1,}:[A-Z]{1,}[0-9]{0,}>", "", x)
   x <- str_trim(x, side = "both")
   })))
@@ -94,19 +101,19 @@ CleanText <- Text %>%
   stringr::str_replace_all(" {2,}", " ") %>%
   stringr::str_trim(side = "both")
 # combine elements into a data frame 
-wscdf <- data.frame(File, Speaker, Text, CleanText)
+obcdf <- data.frame(File, Speaker, Text, CleanText)
 # remove problematic elements
-#wscdf <- wscdf[-grep("\\[", wscdf$CleanText),]
+#obcdf <- obcdf[-grep("\\[", obcdf$CleanText),]
 # remove empty speech units
-wscdf <- wscdf[wscdf$CleanText != "",]
-nrow(wscdf)
+obcdf <- obcdf[obcdf$CleanText != "",]
+nrow(obcdf)
 ```
 
 Extract word counts
 
-```{r isle6_1_03, message=F, warning=F}
+```{r ampobc_1_03, message=F, warning=F}
 # add wordcount
-wordcount <- wscdf %>%
+wordcount <- obcdf %>%
   dplyr::mutate(WordCount = str_count(CleanText, " ")+1) %>%
   dplyr::select(-Text, -CleanText) %>%
   dplyr::group_by(File, Speaker) %>%
@@ -116,135 +123,135 @@ wordcount <- wscdf %>%
 
 Save data to disc
 
-```{r isle6_1_04, message=F, warning=F}
+```{r ampobc_1_04, message=F, warning=F}
 # save raw data to disc
 write.table(wordcount, here::here("data", "wordcount.txt"), sep = "\t", row.names = F, col.names = T)
-write.table(wscdf, here::here("data", "wscdf_raw.txt"), sep = "\t", row.names = F, col.names = T)
-wscdf <- read.delim(here::here("data", "wscdf_raw.txt"), sep = "\t", header = T, skipNul = T)
+write.table(obcdf, here::here("data", "obcdf_raw.txt"), sep = "\t", row.names = F, col.names = T)
+obcdf <- read.delim(here::here("data", "obcdf_raw.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## PoS-Tagging{-}
 
 Split data
 
-```{r isle6_1_05, message=F, warning=F}
+```{r ampobc_1_05, message=F, warning=F}
 # split data into smaller chunks
-pos01 <- wscdf$CleanText[1:10000]
-pos02 <- wscdf$CleanText[10001:20000]
-pos03 <- wscdf$CleanText[20001:22000]
-pos04 <- wscdf$CleanText[22001:23000]
-pos05 <- wscdf$CleanText[23001:24000]
-pos06 <- wscdf$CleanText[24001:25000]
-pos07 <- wscdf$CleanText[25001:30000]
-pos08 <- wscdf$CleanText[30001:40000]
-pos09 <- wscdf$CleanText[40001:50000]
-pos10 <- wscdf$CleanText[50001:60000]
-pos11 <- wscdf$CleanText[60001:70000]
-pos12 <- wscdf$CleanText[70001:80000]
-pos13 <- wscdf$CleanText[80001:90000]
-pos14 <- wscdf$CleanText[90001:100000]
-pos15 <- wscdf$CleanText[100001:nrow(wscdf)]
+pos01 <- obcdf$CleanText[1:10000]
+pos02 <- obcdf$CleanText[10001:20000]
+pos03 <- obcdf$CleanText[20001:22000]
+pos04 <- obcdf$CleanText[22001:23000]
+pos05 <- obcdf$CleanText[23001:24000]
+pos06 <- obcdf$CleanText[24001:25000]
+pos07 <- obcdf$CleanText[25001:30000]
+pos08 <- obcdf$CleanText[30001:40000]
+pos09 <- obcdf$CleanText[40001:50000]
+pos10 <- obcdf$CleanText[50001:60000]
+pos11 <- obcdf$CleanText[60001:70000]
+pos12 <- obcdf$CleanText[70001:80000]
+pos13 <- obcdf$CleanText[80001:90000]
+pos14 <- obcdf$CleanText[90001:100000]
+pos15 <- obcdf$CleanText[100001:nrow(obcdf)]
 ```
 
 Pos-tagging
 
-```{r isle6_1_06, message=F, warning=F, eval = F}
+```{r ampobc_1_06, message=F, warning=F, eval = F}
 source("D:\\R/POStagObject.R") # for pos-tagging objects in R
 library(NLP)
 library(openNLP)
 # pos tagging data
-wscpos01 <- POStag(object = pos01)
-wscpos01 <- as.vector(unlist(wscpos01))
-writeLines(wscpos01, con = here::here("data", "wscpos01.txt"), sep = "\n", useBytes = FALSE)
+obcpos01 <- POStag(object = pos01)
+obcpos01 <- as.vector(unlist(obcpos01))
+writeLines(obcpos01, con = here::here("data", "obcpos01.txt"), sep = "\n", useBytes = FALSE)
 # chunk 2
-wscpos02 <- POStag(object = pos02)
-wscpos02 <- as.vector(unlist(wscpos02))
-writeLines(wscpos02, con = here::here("data", "wscpos02.txt"), sep = "\n", useBytes = FALSE)
+obcpos02 <- POStag(object = pos02)
+obcpos02 <- as.vector(unlist(obcpos02))
+writeLines(obcpos02, con = here::here("data", "obcpos02.txt"), sep = "\n", useBytes = FALSE)
 # chunk 03
-wscpos03 <- POStag(object = pos03)
-wscpos03 <- as.vector(unlist(wscpos03))
-writeLines(wscpos03, con = here::here("data", "wscpos03.txt"), sep = "\n", useBytes = FALSE)
+obcpos03 <- POStag(object = pos03)
+obcpos03 <- as.vector(unlist(obcpos03))
+writeLines(obcpos03, con = here::here("data", "obcpos03.txt"), sep = "\n", useBytes = FALSE)
 # chunk 04
-wscpos04 <- POStag(object = pos04)
-wscpos04 <- as.vector(unlist(wscpos04))
-writeLines(wscpos04, con = here::here("data", "wscpos04.txt"), sep = "\n", useBytes = FALSE)
+obcpos04 <- POStag(object = pos04)
+obcpos04 <- as.vector(unlist(obcpos04))
+writeLines(obcpos04, con = here::here("data", "obcpos04.txt"), sep = "\n", useBytes = FALSE)
 # chunk 05
-wscpos05 <- POStag(object = pos05)
-wscpos05 <- as.vector(unlist(wscpos05))
-writeLines(wscpos05, con = here::here("data", "wscpos05.txt"), sep = "\n", useBytes = FALSE)
+obcpos05 <- POStag(object = pos05)
+obcpos05 <- as.vector(unlist(obcpos05))
+writeLines(obcpos05, con = here::here("data", "obcpos05.txt"), sep = "\n", useBytes = FALSE)
 # chunk 06
-wscpos06 <- POStag(object = pos06)
-wscpos06 <- as.vector(unlist(wscpos06))
-writeLines(wscpos06, con = here::here("data", "wscpos06.txt"), sep = "\n", useBytes = FALSE)
+obcpos06 <- POStag(object = pos06)
+obcpos06 <- as.vector(unlist(obcpos06))
+writeLines(obcpos06, con = here::here("data", "obcpos06.txt"), sep = "\n", useBytes = FALSE)
 # chunk 07
-wscpos07 <- POStag(object = pos07)
-wscpos07 <- as.vector(unlist(wscpos07))
-writeLines(wscpos07, con = here::here("data", "wscpos07.txt"), sep = "\n", useBytes = FALSE)
+obcpos07 <- POStag(object = pos07)
+obcpos07 <- as.vector(unlist(obcpos07))
+writeLines(obcpos07, con = here::here("data", "obcpos07.txt"), sep = "\n", useBytes = FALSE)
 # chunk 08
-wscpos08 <- POStag(object = pos08)
-wscpos08 <- as.vector(unlist(wscpos08))
-writeLines(wscpos08, con = here::here("data", "wscpos08.txt"), sep = "\n", useBytes = FALSE)
+obcpos08 <- POStag(object = pos08)
+obcpos08 <- as.vector(unlist(obcpos08))
+writeLines(obcpos08, con = here::here("data", "obcpos08.txt"), sep = "\n", useBytes = FALSE)
 # chunk 09
-wscpos09 <- POStag(object = pos09)
-wscpos09 <- as.vector(unlist(wscpos09))
-writeLines(wscpos09, con = here::here("data", "wscpos09.txt"), sep = "\n", useBytes = FALSE)
+obcpos09 <- POStag(object = pos09)
+obcpos09 <- as.vector(unlist(obcpos09))
+writeLines(obcpos09, con = here::here("data", "obcpos09.txt"), sep = "\n", useBytes = FALSE)
 # chunk 10
-wscpos10 <- POStag(object = pos10)
-wscpos10 <- as.vector(unlist(wscpos10))
-writeLines(wscpos10, con = here::here("data", "wscpos10.txt"), sep = "\n", useBytes = FALSE)
+obcpos10 <- POStag(object = pos10)
+obcpos10 <- as.vector(unlist(obcpos10))
+writeLines(obcpos10, con = here::here("data", "obcpos10.txt"), sep = "\n", useBytes = FALSE)
 # chunk 11
-wscpos11 <- POStag(object = pos11)
-wscpos11 <- as.vector(unlist(wscpos11))
-writeLines(wscpos11, con = here::here("data", "wscpos11.txt"), sep = "\n", useBytes = FALSE)
+obcpos11 <- POStag(object = pos11)
+obcpos11 <- as.vector(unlist(obcpos11))
+writeLines(obcpos11, con = here::here("data", "obcpos11.txt"), sep = "\n", useBytes = FALSE)
 # chunk 12
-wscpos12 <- POStag(object = pos12)
-wscpos12 <- as.vector(unlist(wscpos12))
-writeLines(wscpos12, con = here::here("data", "wscpos12.txt"), sep = "\n", useBytes = FALSE)
+obcpos12 <- POStag(object = pos12)
+obcpos12 <- as.vector(unlist(obcpos12))
+writeLines(obcpos12, con = here::here("data", "obcpos12.txt"), sep = "\n", useBytes = FALSE)
 # chunk 13
-wscpos13 <- POStag(object = pos13)
-wscpos13 <- as.vector(unlist(wscpos13))
-writeLines(wscpos13, con = here::here("data", "wscpos13.txt"), sep = "\n", useBytes = FALSE)
+obcpos13 <- POStag(object = pos13)
+obcpos13 <- as.vector(unlist(obcpos13))
+writeLines(obcpos13, con = here::here("data", "obcpos13.txt"), sep = "\n", useBytes = FALSE)
 # chunk 14
-wscpos14 <- POStag(object = pos14)
-wscpos14 <- as.vector(unlist(wscpos14))
-writeLines(wscpos14, con = here::here("data", "wscpos14.txt"), sep = "\n", useBytes = FALSE)
+obcpos14 <- POStag(object = pos14)
+obcpos14 <- as.vector(unlist(obcpos14))
+writeLines(obcpos14, con = here::here("data", "obcpos14.txt"), sep = "\n", useBytes = FALSE)
 # chunk 15
-wscpos15 <- POStag(object = pos15)
-wscpos15 <- as.vector(unlist(wscpos15))
-writeLines(wscpos15, con = here::here("data", "wscpos15.txt"), sep = "\n", useBytes = FALSE)
+obcpos15 <- POStag(object = pos15)
+obcpos15 <- as.vector(unlist(obcpos15))
+writeLines(obcpos15, con = here::here("data", "obcpos15.txt"), sep = "\n", useBytes = FALSE)
 # list pos tagged elements
-postag.files = c(here::here("data", "wscpos01.txt"), here::here("data", "wscpos02.txt"), 
-                 here::here("data", "wscpos03.txt"), here::here("data", "wscpos04.txt"), 
-                 here::here("data", "wscpos05.txt"), here::here("data", "wscpos06.txt"),  
-                 here::here("data", "wscpos07.txt"), here::here("data", "wscpos08.txt"), 
-                 here::here("data", "wscpos09.txt"), here::here("data", "wscpos10.txt"),
-                 here::here("data", "wscpos11.txt"), here::here("data", "wscpos12.txt"),
-                 here::here("data", "wscpos13.txt"), here::here("data", "wscpos14.txt"),
-                 here::here("data", "wscpos15.txt"))
+postag.files = c(here::here("data", "obcpos01.txt"), here::here("data", "obcpos02.txt"), 
+                 here::here("data", "obcpos03.txt"), here::here("data", "obcpos04.txt"), 
+                 here::here("data", "obcpos05.txt"), here::here("data", "obcpos06.txt"),  
+                 here::here("data", "obcpos07.txt"), here::here("data", "obcpos08.txt"), 
+                 here::here("data", "obcpos09.txt"), here::here("data", "obcpos10.txt"),
+                 here::here("data", "obcpos11.txt"), here::here("data", "obcpos12.txt"),
+                 here::here("data", "obcpos13.txt"), here::here("data", "obcpos14.txt"),
+                 here::here("data", "obcpos15.txt"))
 # load pos tagged elements
-wscpos <- sapply(postag.files, function(x) {
+obcpos <- sapply(postag.files, function(x) {
   x <- scan(x, what = "char", sep = "\n", quote = "", quiet = T, skipNul = T)
   x <- gsub(" {2,}", " ", x)
   x <- str_trim(x, side = "both")
   x <- str_replace_all(x, fixed("\n"), " ")
 })
 # unlist pos tagged elements
-wscdf$TextPOS <- unlist(wscpos)
+obcdf$TextPOS <- unlist(obcpos)
 ```
 
 Save data to disc
 
-```{r isle6_1_07, message=F, warning=F}
+```{r ampobc_1_07, message=F, warning=F}
 # save data to disc
-#write.table(wscdf, here::here("data", "wscdf_postagged.txt"), sep = "\t", row.names = F, col.names = T)
-wscdf <- read.delim(here::here("data", "wscdf_postagged.txt"), sep = "\t", header = T, skipNul = T)
+#write.table(obcdf, here::here("data", "obcdf_postagged.txt"), sep = "\t", row.names = F, col.names = T)
+obcdf <- read.delim(here::here("data", "obcdf_postagged.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## Concordancing{-}
 
-```{r isle6_1_08, message=F, warning=F}
+```{r ampobc_1_08, message=F, warning=F}
 # extract number of adjs per line
-pstggd <- wscdf$TextPOS
+pstggd <- obcdf$TextPOS
 lpstggd <- strsplit(pstggd, " ")
 nlpstggd <- as.vector(unlist(sapply(lpstggd, function(x){
   x <- x[grep("[A-Z]{0,1}[a-z]{1,}\\/JJ[A-Z]{0,1}", x)]
@@ -259,65 +266,65 @@ source("D:\\R/ConcR_2.3_loadedfiles.R")
 pattern <- "[A-Z]{0,1}[a-z]{1,}\\/JJ[A-Z]{0,1}"
 context <- 50
 # extract all adjectives (concordance)
-concjjwsc <- ConcR(wscdf$TextPOS, pattern, context, all.pre = FALSE)
+concjjobc <- ConcR(obcdf$TextPOS, pattern, context, all.pre = FALSE)
 # repeat rows in data frame as often as there are adjectives in it 
 # (if 0 adj, repeat once)
-wscadjdf <- wscdf[rep(seq(nrow(wscdf)), rp),]
+obcadjdf <- obcdf[rep(seq(nrow(obcdf)), rp),]
 # combine data sets
-wscadjdf <- data.frame(1:nrow(wscadjdf), wscadjdf, concjjwsc)
+obcadjdf <- data.frame(1:nrow(obcadjdf), obcadjdf, concjjobc)
 # remove rows without Tokens
-wscadjdf <- wscadjdf[is.na(wscadjdf$Token) == F,]
+obcadjdf <- obcadjdf[is.na(obcadjdf$Token) == F,]
 # add clean column names
-colnames(wscadjdf)[1] <- "ID"
+colnames(obcadjdf)[1] <- "ID"
 # clean adjectives
-wscadjdf$Adjective <- str_replace_all(wscadjdf$Token, "/.*", "")
+obcadjdf$Adjective <- str_replace_all(obcadjdf$Token, "/.*", "")
 # add Variant column
-wscadjdf$Variant <- gsub(".* ", "", str_trim(wscadjdf$PreContext, side = "both")) 
+obcadjdf$Variant <- gsub(".* ", "", str_trim(obcadjdf$PreContext, side = "both")) 
 # inspect data
-head(wscadjdf)
+head(obcadjdf)
 ```
 
 
 
-```{r isle6_1_09, message=F, warning=F}
+```{r ampobc_1_09, message=F, warning=F}
 # save raw data to disc
-write.table(wscadjdf, here::here("data", "wscadjdf.txt"), sep = "\t", row.names = F, col.names = T)
-wscadjdf <- read.delim(here::here("data", "wscadjdf.txt"), sep = "\t", header = T, skipNul = T)
+write.table(obcadjdf, here::here("data", "obcadjdf.txt"), sep = "\t", row.names = F, col.names = T)
+obcadjdf <- read.delim(here::here("data", "obcadjdf.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## Process sociodemographic data{-}
 
-```{r isle6_1_10, message=F, warning=F}
+```{r ampobc_1_10, message=F, warning=F}
 # load files
-biowsc <- read.delim(biowscpath, sep = "\t", header = F, skipNul = T)
-guidewsc <- read.delim(bioguidewsc, sep = "\t", header = F, skipNul = T)
-linkwsc <- read.delim(biolinkwsc, sep = "\t", header = F, skipNul = T)
-extractswsc <- read.delim(bioextractswsc, sep = "\t", header = F, skipNul = T)
+bioobc <- read.delim(bioobcpath, sep = "\t", header = F, skipNul = T)
+guideobc <- read.delim(bioguideobc, sep = "\t", header = F, skipNul = T)
+linkobc <- read.delim(biolinkobc, sep = "\t", header = F, skipNul = T)
+extractsobc <- read.delim(bioextractsobc, sep = "\t", header = F, skipNul = T)
 # add column names
-biowsc <- biowsc %>%
+bioobc <- bioobc %>%
   dplyr::rename(Id = V1, Ethnicity = V2, Gender = V3, Age = V4, 
                 Occupation = V5, Education = V6, L1 = V7) %>%
   mutate(Gender=replace(Gender, Gender=="F", "Woman")) %>%
   mutate(Gender=replace(Gender, Gender=="M", "Man"))
 # add column names to guide
-linkwsc <- linkwsc %>%
+linkobc <- linkobc %>%
   dplyr::rename(File = V1, Id = V2, Speaker = V3, Words = V4)
 # add column names to extracts
-extractswsc <- extractswsc %>%
+extractsobc <- extractsobc %>%
   dplyr::rename(File = V1, WordsFile = V2, Date = V3, Topic = V4, 
                 ExtractMinutes = V5, Minutes = V6)
-# join biowsc and linkwsc
-wscspeakerinformation <- dplyr::left_join(biowsc, linkwsc, by = "Id")
-wscspeakerinformation <- dplyr::left_join(wscspeakerinformation, extractswsc, by = "File")
+# join bioobc and linkobc
+obcspeakerinformation <- dplyr::left_join(bioobc, linkobc, by = "Id")
+obcspeakerinformation <- dplyr::left_join(obcspeakerinformation, extractsobc, by = "File")
 # inspect
-head(wscspeakerinformation)
+head(obcspeakerinformation)
 ```
 
 
 
-```{r isle6_1_11, message=F, warning=F}
+```{r ampobc_1_11, message=F, warning=F}
 # add information about type
-wscspeakerinformation <- wscspeakerinformation %>%
+obcspeakerinformation <- obcspeakerinformation %>%
   dplyr::mutate(Type = File) %>%
   dplyr::mutate(Type = Type %>%
   str_remove_all("[0-9]{0,}") %>%
@@ -337,56 +344,56 @@ wscspeakerinformation <- wscspeakerinformation %>%
   str_replace_all("DGU", "ParliamentaryDebate") %>%
   str_replace_all("DGZ", "TransactionsAndMeetings"))
 # inspect speaker information
-head(wscspeakerinformation); nrow(wscspeakerinformation)
+head(obcspeakerinformation); nrow(obcspeakerinformation)
 ```
 
 
 
-```{r isle6_1_12, message=F, warning=F}
+```{r ampobc_1_12, message=F, warning=F}
 # save raw data to disc
-write.table(wscspeakerinformation, here::here("data", "wscspeakerinformation.txt"), sep = "\t", 
+write.table(obcspeakerinformation, here::here("data", "obcspeakerinformation.txt"), sep = "\t", 
             row.names = F, col.names = T)
-wscspeakerinformation <- read.delim(here::here("data", "wscspeakerinformation.txt"), sep = "\t", 
+obcspeakerinformation <- read.delim(here::here("data", "obcspeakerinformation.txt"), sep = "\t", 
                                     header = T, skipNul = T)
-wscadjdf <- read.delim(here::here("data", "wscadjdf.txt"), sep = "\t", header = T, skipNul = T)
+obcadjdf <- read.delim(here::here("data", "obcadjdf.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## Combine data with biodata{-}
 
-```{r isle6_1_13, message=F, warning=F}
-# join wscadjdf and wscspeakerinformation
-wsc <- join(wscadjdf, wscspeakerinformation, by = c("File", "Speaker"))
+```{r ampobc_1_13, message=F, warning=F}
+# join obcadjdf and obcspeakerinformation
+obc <- join(obcadjdf, obcspeakerinformation, by = c("File", "Speaker"))
 ```
 
 ## Frequency{-}
 
-```{r isle6_1_14, message=F, warning=F}
+```{r ampobc_1_14, message=F, warning=F}
 # code freq of adj type by date category
-frqadjtb <- table(wsc$Age, wsc$Adjective)
+frqadjtb <- table(obc$Age, obc$Adjective)
 relfreqadjtb <- round(prop.table(frqadjtb, margin = 1)*100, 5)
 relfreqadjdf <- as.data.frame(relfreqadjtb)
 colnames(relfreqadjdf)[1:2] <- c("Age", "Adjective")
 # add freq by date to data
-wscadjdf <- join(wsc, relfreqadjdf, by=c("Age", "Adjective"))
+obcadjdf <- join(obc, relfreqadjdf, by=c("Age", "Adjective"))
 # relabel Freq
-colnames(wscadjdf)[which(colnames(wscadjdf) == "Freq")] <- "Frequency"
+colnames(obcadjdf)[which(colnames(obcadjdf) == "Freq")] <- "Frequency"
 # inspect data
-head(wscadjdf)
+head(obcadjdf)
 ```
 
 Save data to disc
 
-```{r isle6_1_15, message=F, warning=F}
+```{r ampobc_1_15, message=F, warning=F}
 # save raw data to disc
-write.table(wscadjdf, here::here("data", "wscadjdf_spk.txt"), sep = "\t", row.names = F, col.names = T)
-wscadjdf <- read.delim(here::here("data", "wscadjdf_spk.txt"), sep = "\t", header = T, skipNul = T)
+write.table(obcadjdf, here::here("data", "obcadjdf_spk.txt"), sep = "\t", row.names = F, col.names = T)
+obcadjdf <- read.delim(here::here("data", "obcadjdf_spk.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## Check Amplifiers{-}
 
 not included: *quite*, *too*, and *well*.
 
-```{r isle6_1_16, message=F, warning=F}
+```{r ampobc_1_16, message=F, warning=F}
 # define amplifiers 
 amplifiers <- c("absolutely", "actually", "aggressively", "amazingly", "appallingly", "awful", 
                 "awfully", "badly", "bloody", "certainly", "clearly", "complete", "dead", "completely", 
@@ -406,9 +413,9 @@ amplifiers <- c("absolutely", "actually", "aggressively", "amazingly", "appallin
 
 ## Syntactic Function{-}
 
-```{r isle6_1_17, message=F, warning=F}
+```{r ampobc_1_17, message=F, warning=F}
 # determine function
-Function1 <- wscadjdf$PostContext %>%
+Function1 <- obcadjdf$PostContext %>%
   stringr::str_trim(side = "both") %>%
   tolower() %>%
   stringr::str_replace_all(" {2,}", " ") %>%
@@ -417,7 +424,7 @@ Function1 <- wscadjdf$PostContext %>%
   stringr::str_replace_all(".*/n.*", "Attributive") %>%
   stringr::str_replace_all(fixed("/."), "PUNCT") %>%
   stringr::str_replace_all(".*PUNCT.*", "Attributive")
-Function2 <-  wscadjdf$PostContext %>%
+Function2 <-  obcadjdf$PostContext %>%
   stringr::str_trim(side = "both") %>%
   tolower() %>%
   stringr::str_replace(" ", "") %>%
@@ -426,38 +433,38 @@ Function2 <-  wscadjdf$PostContext %>%
   stringr::str_replace_all(fixed("/."), "PUNCT") %>%
   stringr::str_replace_all(".*PUNCT.*", "Attributive")
 functiontb <- cbind(Function1, Function2)
-wscadjdf$Function <-  as.vector(unlist(apply(functiontb, 1, function(x){
+obcadjdf$Function <-  as.vector(unlist(apply(functiontb, 1, function(x){
   x <-   ifelse(x[1] == "" | x[1] == "Attributive" | x[2] == "Attributive", "Attributive", "Predicative")
 })))
 # shorten post Context
-wscadjdf$PostContext <- substr(wscadjdf$PostContext, 1, ifelse((nchar(wscadjdf$PostContext)+25) <25, max(nchar(wscadjdf$PostContext)), 25))
+obcadjdf$PostContext <- substr(obcadjdf$PostContext, 1, ifelse((nchar(obcadjdf$PostContext)+25) <25, max(nchar(obcadjdf$PostContext)), 25))
 # pre Context
-wscadjdf$PreContext <- str_trim(wscadjdf$PreContext, side = "both")
-wscadjdf$PreContextLong <- wscadjdf$PreContext
-wscadjdf$PreContextLong <- substr(wscadjdf$PreContextLong, ifelse(nchar(wscadjdf$PreContextLong)-25 <=0, 1, 
-                                                              nchar(wscadjdf$PreContextLong)-25), nchar(wscadjdf$PreContextLong))
-wscadjdf$PreContext <- gsub(".* ", "", wscadjdf$PreContext)
+obcadjdf$PreContext <- str_trim(obcadjdf$PreContext, side = "both")
+obcadjdf$PreContextLong <- obcadjdf$PreContext
+obcadjdf$PreContextLong <- substr(obcadjdf$PreContextLong, ifelse(nchar(obcadjdf$PreContextLong)-25 <=0, 1, 
+                                                              nchar(obcadjdf$PreContextLong)-25), nchar(obcadjdf$PreContextLong))
+obcadjdf$PreContext <- gsub(".* ", "", obcadjdf$PreContext)
 # amplifier variant
-wscadjdf$PreContext <- gsub("\\/.*", "", wscadjdf$PreContext)
-wscadjdf$Variant <- ifelse(wscadjdf$PreContext %in% amplifiers, wscadjdf$PreContext, "0")
+obcadjdf$PreContext <- gsub("\\/.*", "", obcadjdf$PreContext)
+obcadjdf$Variant <- ifelse(obcadjdf$PreContext %in% amplifiers, obcadjdf$PreContext, "0")
 # amplified y/n
-wscadjdf$Amplified <- ifelse(wscadjdf$Variant == "0", 0, 1) 
+obcadjdf$Amplified <- ifelse(obcadjdf$Variant == "0", 0, 1) 
 # adjective
-wscadjdf$Adjective <- tolower(wscadjdf$Adjective)
+obcadjdf$Adjective <- tolower(obcadjdf$Adjective)
 # inspect data
-nrow(wscadjdf); head(wscadjdf); table(wscadjdf$Variant)
+nrow(obcadjdf); head(obcadjdf); table(obcadjdf$Variant)
 ```
 
 ## Code Priming{-}
 
-```{r isle6_1_18, message=F, warning=F}
+```{r ampobc_1_18, message=F, warning=F}
 # code priming
-prim1 <- c(rep(0, 1), wscadjdf$Variant[1:length(wscadjdf$Variant)-1])
-prim2 <- c(rep(0, 2), wscadjdf$Variant[1:(length(wscadjdf$Variant)-2)])
-prim3 <- c(rep(0, 3), wscadjdf$Variant[1:(length(wscadjdf$Variant)-3)])
-primtb <- cbind(wscadjdf$Variant, prim1, prim2, prim3)
+prim1 <- c(rep(0, 1), obcadjdf$Variant[1:length(obcadjdf$Variant)-1])
+prim2 <- c(rep(0, 2), obcadjdf$Variant[1:(length(obcadjdf$Variant)-2)])
+prim3 <- c(rep(0, 3), obcadjdf$Variant[1:(length(obcadjdf$Variant)-3)])
+primtb <- cbind(obcadjdf$Variant, prim1, prim2, prim3)
 
-wscadjdf$Priming <- as.vector(unlist(apply(primtb, 1, function(x){
+obcadjdf$Priming <- as.vector(unlist(apply(primtb, 1, function(x){
   x <- ifelse(x[1]== "0" , "NoPrime",
               ifelse(x[1] == x[2] | x[1] == x[3] | x[1] == x[4], "Prime", "NoPrime"))
 })))
@@ -473,33 +480,33 @@ PostContextdowntoners <- c(".*enough.*")
 nonpropadj <- c("only", "much", "many", "cheaper", "cheaperr", "bests", "larger",
                 "bst", "better", "bigger")
 # check length of dataset
-str(wscadjdf); head(wscadjdf); nrow(wscadjdf)
+str(obcadjdf); head(obcadjdf); nrow(obcadjdf)
 ```
 
 ## Remove negated forms et al.{-}
 
-```{r isle6_1_19, message=F, warning=F}
+```{r ampobc_1_19, message=F, warning=F}
 # find items to be removed
-supsidx <- unique(grep(paste(sups,collapse="|"), wscadjdf$PreContextLong, value=F))
-negsidx <- unique(grep(paste(negs,collapse="|"), wscadjdf$PreContextLong, value=F))
-downtonersidx <- unique(grep(paste(downtoners,collapse="|"), wscadjdf$PreContextLong, value=F))
-specialformsidx <- unique(grep(paste(specialforms,collapse="|"), wscadjdf$PreContextLong, value=F))
-PostContextdowntonersidx <- unique(grep(paste(PostContextdowntoners,collapse="|"), wscadjdf$PostContext, value=F))
-nonpropadjidx <- unique(grep(paste(nonpropadj,collapse="|"), wscadjdf$Adjective, value=F))
+supsidx <- unique(grep(paste(sups,collapse="|"), obcadjdf$PreContextLong, value=F))
+negsidx <- unique(grep(paste(negs,collapse="|"), obcadjdf$PreContextLong, value=F))
+downtonersidx <- unique(grep(paste(downtoners,collapse="|"), obcadjdf$PreContextLong, value=F))
+specialformsidx <- unique(grep(paste(specialforms,collapse="|"), obcadjdf$PreContextLong, value=F))
+PostContextdowntonersidx <- unique(grep(paste(PostContextdowntoners,collapse="|"), obcadjdf$PostContext, value=F))
+nonpropadjidx <- unique(grep(paste(nonpropadj,collapse="|"), obcadjdf$Adjective, value=F))
 # combine indices
 idxs <- unique(c(supsidx, negsidx, downtonersidx, specialformsidx, PostContextdowntonersidx, nonpropadjidx))
 # remove forms that require removal
-wscadjdf <- wscadjdf[-idxs,]
+obcadjdf <- obcadjdf[-idxs,]
 # remove empty values
-wscadjdf <- wscadjdf[!wscadjdf$Variant == "", ]
+obcadjdf <- obcadjdf[!obcadjdf$Variant == "", ]
 ```
 
 
 
-```{r isle6_1_20, message=F, warning=F}
+```{r ampobc_1_20, message=F, warning=F}
 # save raw data to disc
-write.table(wscadjdf, here::here("data", "wscadjdf_wo_neg.txt"), sep = "\t", row.names = F)
-wscadjdf <- read.delim(here::here("data", "wscadjdf_wo_neg.txt"), sep = "\t", header = T, skipNul = T)
+write.table(obcadjdf, here::here("data", "obcadjdf_wo_neg.txt"), sep = "\t", row.names = F)
+obcadjdf <- read.delim(here::here("data", "obcadjdf_wo_neg.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## Remove lexicalizations 
@@ -508,55 +515,55 @@ Remove variants that were not intensified by at least 2 different amplifier vari
 
 > NOT EXECTUTED!
 
-```{r isle6_1_21, message=F, warning=F, eval = F}
-nrow(wscadjdf)
+```{r ampobc_1_21, message=F, warning=F, eval = F}
+nrow(obcadjdf)
 # remove items that were not intensified by a minimum of 2 intensifier variants
-pintadjtb <- table(wscadjdf$Adjective, wscadjdf$Variant)
+pintadjtb <- table(obcadjdf$Adjective, obcadjdf$Variant)
 #pintadjtb <- pintadjtb[2:nrow(pintadjtb),]
 pintadjtb <- pintadjtb[,2:ncol(pintadjtb)]
 pintadjtb2 <- apply(pintadjtb, 1, function(x){
   x <- ifelse(x > 1, 1, x)})
 pintadjtb3 <- colSums(pintadjtb2)
 pintadjschildes <- names(pintadjtb3)[which(pintadjtb3 >= 2)]
-wscadjdf <- wscadjdf[wscadjdf$Adjective %in% pintadjschildes, ]
-nrow(wscadjdf)
+obcadjdf <- obcadjdf[obcadjdf$Adjective %in% pintadjschildes, ]
+nrow(obcadjdf)
 ```
 
 ## Remove misspelled forms {-}
 
-```{r isle6_1_22, message=F, warning=F, eval = F}
+```{r ampobc_1_22, message=F, warning=F, eval = F}
 # inspect adjectives
-names(table(wscadjdf$Adjective))
+names(table(obcadjdf$Adjective))
 ```
 
 Remove words not in dictionary or words that consist only of 1 or 2 characters
 
-```{r isle6_1_23, message=F, warning=F}
+```{r ampobc_1_23, message=F, warning=F}
 # correct spelling
 library(hunspell)
-wscadjdf <- wscadjdf %>%
+obcadjdf <- obcadjdf %>%
   dplyr::filter(hunspell_check(Adjective)) %>%
   dplyr::filter(nchar(Adjective) > 2)
 # inspect
-head(wscadjdf)
+head(obcadjdf)
 ```
 
 
 
 ## Remove strange forms{-}
 
-```{r isle6_1_24, message=F, warning=F}
+```{r ampobc_1_24, message=F, warning=F}
 # inspect adjectives
-names(table(wscadjdf$Adjective))
+names(table(obcadjdf$Adjective))
 ```
 
 Remove mistagged items
 
-```{r isle6_1_25, message=F, warning=F}
+```{r ampobc_1_25, message=F, warning=F}
 library(udpipe)
 #model <- udpipe_download_model(language = "english")
 udmodel_english <- udpipe_load_model(file = here::here("english-ewt-ud-2.5-191206.udpipe"))
-udpipe_adjectives <- udpipe_annotate(udmodel_english, wscadjdf$Adjective) %>%
+udpipe_adjectives <- udpipe_annotate(udmodel_english, obcadjdf$Adjective) %>%
   data.frame() %>%
   dplyr::filter(xpos == "JJ") %>%
   dplyr::pull(sentence)
@@ -564,19 +571,19 @@ udpipe_adjectives <- udpipe_annotate(udmodel_english, wscadjdf$Adjective) %>%
 head(udpipe_adjectives)
 ```
 
-```{r isle6_1_26, message=F, warning=F}
-nrow(wscadjdf)
-wscadjdf <-wscadjdf %>%
+```{r ampobc_1_26, message=F, warning=F}
+nrow(obcadjdf)
+obcadjdf <-obcadjdf %>%
   dplyr::filter(Adjective %in% udpipe_adjectives)
 # inspect
-nrow(wscadjdf)
+nrow(obcadjdf)
 ```
 
 Remove adjectives that were never amplified
 
 
-```{r isle6_1_27, message=F, warning=F}
-amp_adjs <- wscadjdf %>%
+```{r ampobc_1_27, message=F, warning=F}
+amp_adjs <- obcadjdf %>%
   dplyr::filter(Amplified == 1) %>%
   dplyr::pull(Adjective) %>%
   table() %>%
@@ -584,31 +591,31 @@ amp_adjs <- wscadjdf %>%
 # inspect
 head(amp_adjs)
 ```
-```{r isle6_1_28, message=F, warning=F}
-nrow(wscadjdf)
-wscadjdf <- wscadjdf %>%
+```{r ampobc_1_28, message=F, warning=F}
+nrow(obcadjdf)
+obcadjdf <- obcadjdf %>%
   dplyr::filter(Adjective %in% amp_adjs)
-nrow(wscadjdf)
+nrow(obcadjdf)
 ```
 
 
 Save data to disc
 
-```{r isle6_1_29, message=F, warning=F}
+```{r ampobc_1_29, message=F, warning=F}
 # save raw data to disc
-write.table(wscadjdf, here::here("data", "wscadjdf_clean.txt"), sep = "\t", row.names = F)
-wscadjdf <- read.delim(here::here("data", "wscadjdf_clean.txt"), sep = "\t", header = T, skipNul = T)
+write.table(obcadjdf, here::here("data", "obcadjdf_clean.txt"), sep = "\t", row.names = F)
+obcadjdf <- read.delim(here::here("data", "obcadjdf_clean.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
 ## Gradability{-}
 
-```{r isle6_1_30, message=F, warning=F}
+```{r ampobc_1_30, message=F, warning=F}
 # code gradability
 # load Gradability data (derived from COCA)
 gradability <- read.delim(here::here("data", "Gradability.txt"), sep = "\t", header = T, quote = "", skipNul = T)
-wscadjdf$Gradability <- ifelse(wscadjdf$Adjective %in% gradability$Adjective, gradability$Beta, 1)
+obcadjdf$Gradability <- ifelse(obcadjdf$Adjective %in% gradability$Adjective, gradability$Beta, 1)
 # inspect data
-nrow(wscadjdf); head(wscadjdf)
+nrow(obcadjdf); head(obcadjdf)
 ```
 
 ## Semantic Classification{-}
@@ -635,7 +642,7 @@ Add semantic types [@tagliamonte2008intensifiers, @dixon1977adjectives]
 
 * other
 
-```{r isle6_1_31, message=F, warning=F}
+```{r ampobc_1_31, message=F, warning=F}
 # load data
 code1 <- read.delim(here::here("data", "semcodecg1.txt"), sep = "\t", header = T, skipNul = T)
 code2 <- read.delim(here::here("data", "semcodedjm1.txt"), sep = "\t", header = T, skipNul = T)
@@ -668,7 +675,7 @@ colnames(semcode)[3:12] <- c("Dimension", "Difficulty", "PhysicalProperty", "Col
 ```
 
 
-```{r isle6_1_32, message=F, warning=F}
+```{r ampobc_1_32, message=F, warning=F}
 # load package
 library(dplyr)
 AdjectiveSemantics <- semcode %>%
@@ -693,7 +700,7 @@ AdjectiveSemantics <- AdjectiveSemantics %>%
 summary(AdjectiveSemantics$Certainty)
 ```
 
-```{r isle6_1_33, message=F, warning=F}
+```{r ampobc_1_33, message=F, warning=F}
 Age <- AdjectiveSemantics %>%
   dplyr::filter(Age != 0) %>%
   dplyr::pull(Adjective)
@@ -722,7 +729,7 @@ Value <- AdjectiveSemantics %>%
   dplyr::filter(Value != 0) %>%
   dplyr::pull(Adjective)
 # add semantic category to data
-wscadjdf <- wscadjdf %>%
+obcadjdf <- obcadjdf %>%
   dplyr::mutate(SemanticCategory = dplyr::case_when(Adjective %in% Age ~ "Age",
                                                     Adjective %in% Color ~ "Color",
                                                     Adjective %in% Difficulty ~ "Difficulty",
@@ -734,13 +741,13 @@ wscadjdf <- wscadjdf %>%
                                                     Adjective %in% Value ~ "Value", 
                                                     TRUE ~ "Other"))
 # table sem class of tokens
-table(wscadjdf$SemanticCategory)
+table(obcadjdf$SemanticCategory)
 ```
 
 
 ## Sentiment Analysis{-}
 
-```{r isle6_1_34, message=F, warning=F}
+```{r ampobc_1_34, message=F, warning=F}
 # positive adjectives
 pos_adj <- tidytext::get_sentiments("nrc") %>%
   dplyr::filter(sentiment == "positive") %>%
@@ -750,50 +757,50 @@ neg_adj <- tidytext::get_sentiments("nrc") %>%
   dplyr::filter(sentiment == "negative") %>%
   dplyr::pull(word)
 # annotate emotionality
-wscadjdf <- wscadjdf %>%
+obcadjdf <- obcadjdf %>%
   dplyr::mutate(Emotionality = dplyr::case_when(Adjective %in% pos_adj ~ "positive",
                                                 Adjective %in% neg_adj ~ "negative",
                                                 TRUE ~ "neutral")) %>%
   dplyr::mutate(Emotionality = factor(Emotionality, levels = c("neutral", "negative", "positive")))
 # inspect
-head(wscadjdf)
+head(obcadjdf)
 ```
 
 ## Correct errors{-}
 
-```{r isle6_1_35, message=F, warning=F}
-wscadjdf %>%
+```{r ampobc_1_35, message=F, warning=F}
+obcadjdf %>%
   dplyr::filter(Variant == "so") %>%
   dplyr::group_by(Variant, Function) %>%
   dplyr::summarize(Frequency = n())
 ```
 
 
-```{r isle6_1_36, message=F, warning=F}
-wscadjdf <- wscadjdf %>%
+```{r ampobc_1_36, message=F, warning=F}
+obcadjdf <- obcadjdf %>%
   dplyr::mutate(Function = ifelse(Variant == "so" & Function == "Attributive", "Predicative", Function))
 ```
 
-```{r isle6_1_37, message=F, warning=F}
-wscadjdf %>%
+```{r ampobc_1_37, message=F, warning=F}
+obcadjdf %>%
   dplyr::filter(Variant == "so") %>%
   dplyr::group_by(Variant, Function) %>%
   dplyr::summarize(Frequency = n())
 ```
 
-```{r isle6_1_38, message=F, warning=F}
+```{r ampobc_1_38, message=F, warning=F}
 # inspect data
-wscadjdf %>%
+obcadjdf %>%
   head(10) %>%
-  kable(caption = "First 10 rows of wscadjdf.") %>%
+  kable(caption = "First 10 rows of obcadjdf.") %>%
   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), 
                             full_width = F)
 ```
 
 
-```{r isle6_1_39, message=F, warning=F}
+```{r ampobc_1_39, message=F, warning=F}
 # save raw data to disc
-write.table(wscadjdf, here::here("data", "wsc_fullclean.txt"), sep = "\t", row.names = F, col.names = T)
+write.table(obcadjdf, here::here("data", "obc_fullclean.txt"), sep = "\t", row.names = F, col.names = T)
 ```
 
 
@@ -813,7 +820,7 @@ Schweinberger, Martin. `r format(Sys.time(), '%Y')`. *On the waning of forms - a
 }
 ```
 
-```{r isle6_1_40, message=F, warning=F}
+```{r ampobc_1_40, message=F, warning=F}
 sessionInfo()
 ```
 
