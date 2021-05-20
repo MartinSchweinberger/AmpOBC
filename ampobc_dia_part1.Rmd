@@ -35,11 +35,12 @@ options(max.print=10000)
 # specify paths
 corpuspath <- "D:\\Uni\\Korpora\\Original\\OldBaileyCorpus\\OldBaileyCorpus2\\OldBaileyCorpus2\\OBC2"
 # define corpus files
-corpusfiles = list.files(path = corpuspath, pattern = ".xml", all.files = T,
+corpusfiles = list.files(path = corpuspath, pattern = "POS", all.files = T,
                          full.names = T, recursive = F, ignore.case = T, 
                          include.dirs = F)
 # for testing purposes we only use the first 5 files
-#corpusfiles <- corpusfiles[1:5]
+corpusfiles <- corpusfiles[1:5]
+# inspect
 head(corpusfiles)
 ```
 
@@ -65,299 +66,144 @@ str(obc)
 
 ```{r ampobc_1_02, message=F, warning=F}
 # extract file names
-File <- names(obc)
-File <- stringr::str_remove_all(File, ".*/")
-File <- gsub(".xml", "", File)
-File
-```
-
-
-```{r ampobc_1_02, message=F, warning=F}
+file <- names(obc)
+file <- stringr::str_remove_all(file, ".*/")
+file <- gsub(".xml", "", file)
 # extract raw text
-Text <- as.vector(unlist(obc))
+text <- as.vector(unlist(obc))
+# extract date
+date <- stringr::str_extract_all(file, "POS-[0-9]{4,4}") %>%
+  stringr::str_remove_all("POS-")
 # clean text
-CleanText <- Text %>%
+cleantext <- text %>%
   stringr::str_remove_all(fixed("\\")) %>%
+  stringr::str_remove_all("_[:graph:]") %>%
   tolower() %>%
   stringr::str_squish()
+# extract wordcount
+words <- stringr::str_count(cleantext, " ")+1
+# create an id
+docname <- paste0("text", 1:length(Text))
 # combine elements into a data frame 
-obcdf <- data.frame(File, Text, CleanText)
-# remove problematic elements
-#obcdf <- obcdf[-grep("\\[", obcdf$CleanText),]
-# remove empty speech units
-obcdf <- obcdf[obcdf$CleanText != "",]
+obcdf <- data.frame(docname, file, date, text, cleantext, words)
+# inspect
 nrow(obcdf)
 ```
 
-Extract word counts
+Save data to disc
 
-```{r ampobc_1_03, message=F, warning=F}
-# add wordcount
-obcdf <- obcdf %>%
-  dplyr::mutate(WordCount = str_count(CleanText, " ")+1)
+```{r ampobc_1_04, message=F, warning=F}
+# save data
+base::saveRDS(obcdf, file = here::here("data", "obcdf_raw.rda"))
+# reload .rda data
+obcdf  <- base::readRDS(file = here::here("data", "obcdf_raw.rda"))
+```
+
+
+## Concordancing{-}
+
+```{r ampobc_1_08, message=F, warning=F}
+library(quanteda)
+# generate kwic
+concobc <- quanteda::kwic(obcdf$text, 
+                         pattern = "[:alnum:]{1,}_JJ[:alnum:]{0,3}", 
+                         window = 15, 
+                         valuetype = "regex") %>%
+  as.data.frame() %>%
+  dplyr::select(-pattern, -from, -to)
 # inspect
-colnames(obcdf)
+head(concobc)
+```
+
+
+
+
+```{r ampobc_1_08, message=F, warning=F}
+meta <- obcdf %>%
+  dplyr::select(docname, file, date, words)
+# combine meta and kwic
+ampobc <- dplyr::left_join(concobc, meta, by = "docname") %>%
+  dplyr::mutate(id = 1:nrow(.))
+# inspect
+head(ampobc)
+```
+
+
+
+```{r}
+ampobc %>%
+  ggplot(aes(x = date)) + 
+  geom_histogram(stat="count")
 ```
 
 
 Save data to disc
 
 ```{r ampobc_1_04, message=F, warning=F}
-# save raw data to disc
-write.table(obcdf, here::here("data", "obcdf_raw.txt"), sep = "\t", row.names = F, col.names = T)
-obcdf <- read.delim(here::here("data", "obcdf_raw.txt"), sep = "\t", header = T, skipNul = T)
-```
-
-## PoS-Tagging{-}
-
-Split data
-
-```{r ampobc_1_05, message=F, warning=F}
-# split data into smaller chunks
-pos01 <- obcdf$CleanText[1:100]
-pos02 <- obcdf$CleanText[101:200]
-pos03 <- obcdf$CleanText[201:300]
-pos04 <- obcdf$CleanText[301:400]
-pos05 <- obcdf$CleanText[401:500]
-pos06 <- obcdf$CleanText[501:600]
-pos07 <- obcdf$CleanText[601:700]
-pos08 <- obcdf$CleanText[701:800]
-pos09 <- obcdf$CleanText[801:900]
-pos10 <- obcdf$CleanText[901:1000]
-pos11 <- obcdf$CleanText[1001:1100]
-pos12 <- obcdf$CleanText[1101:1200]
-pos13 <- obcdf$CleanText[1201:nrow(obcdf)]
-```
-
-Pos-tagging
-
-```{r ampobc_1_06, message=F, warning=F, eval = F}
-source("D:\\R/POStagObject.R") # for pos-tagging objects in R
-library(NLP)
-library(openNLP)
-# pos tagging data
-obcpos01 <- POStag(object = pos01)
-obcpos01 <- as.vector(unlist(obcpos01))
-writeLines(obcpos01, con = here::here("data", "obcpos01.txt"), sep = "\n", useBytes = FALSE)
-# chunk 2
-obcpos02 <- POStag(object = pos02)
-obcpos02 <- as.vector(unlist(obcpos02))
-writeLines(obcpos02, con = here::here("data", "obcpos02.txt"), sep = "\n", useBytes = FALSE)
-# chunk 03
-obcpos03 <- POStag(object = pos03)
-obcpos03 <- as.vector(unlist(obcpos03))
-writeLines(obcpos03, con = here::here("data", "obcpos03.txt"), sep = "\n", useBytes = FALSE)
-# chunk 04
-obcpos04 <- POStag(object = pos04)
-obcpos04 <- as.vector(unlist(obcpos04))
-writeLines(obcpos04, con = here::here("data", "obcpos04.txt"), sep = "\n", useBytes = FALSE)
-# chunk 05
-obcpos05 <- POStag(object = pos05)
-obcpos05 <- as.vector(unlist(obcpos05))
-writeLines(obcpos05, con = here::here("data", "obcpos05.txt"), sep = "\n", useBytes = FALSE)
-# chunk 06
-obcpos06 <- POStag(object = pos06)
-obcpos06 <- as.vector(unlist(obcpos06))
-writeLines(obcpos06, con = here::here("data", "obcpos06.txt"), sep = "\n", useBytes = FALSE)
-# chunk 07
-obcpos07 <- POStag(object = pos07)
-obcpos07 <- as.vector(unlist(obcpos07))
-writeLines(obcpos07, con = here::here("data", "obcpos07.txt"), sep = "\n", useBytes = FALSE)
-# chunk 08
-obcpos08 <- POStag(object = pos08)
-obcpos08 <- as.vector(unlist(obcpos08))
-writeLines(obcpos08, con = here::here("data", "obcpos08.txt"), sep = "\n", useBytes = FALSE)
-# chunk 09
-obcpos09 <- POStag(object = pos09)
-obcpos09 <- as.vector(unlist(obcpos09))
-writeLines(obcpos09, con = here::here("data", "obcpos09.txt"), sep = "\n", useBytes = FALSE)
-# chunk 10
-obcpos10 <- POStag(object = pos10)
-obcpos10 <- as.vector(unlist(obcpos10))
-writeLines(obcpos10, con = here::here("data", "obcpos10.txt"), sep = "\n", useBytes = FALSE)
-# chunk 11
-obcpos11 <- POStag(object = pos11)
-obcpos11 <- as.vector(unlist(obcpos11))
-writeLines(obcpos11, con = here::here("data", "obcpos11.txt"), sep = "\n", useBytes = FALSE)
-# chunk 12
-obcpos12 <- POStag(object = pos12)
-obcpos12 <- as.vector(unlist(obcpos12))
-writeLines(obcpos12, con = here::here("data", "obcpos12.txt"), sep = "\n", useBytes = FALSE)
-# chunk 13
-obcpos13 <- POStag(object = pos13)
-obcpos13 <- as.vector(unlist(obcpos13))
-writeLines(obcpos13, con = here::here("data", "obcpos13.txt"), sep = "\n", useBytes = FALSE)
+# save data
+base::saveRDS(ampobc, file = here::here("data", "ampobc_raw.rda"))
+# reload .rda data
+ampobc  <- base::readRDS(file = here::here("data", "ampobc_raw.rda"))
 ```
 
 
-
-```{r ampobc_1_07, message=F, warning=F}
-# list pos tagged elements
-postag.files = c(here::here("data", "obcpos01.txt"), here::here("data", "obcpos02.txt"), 
-                 here::here("data", "obcpos03.txt"), here::here("data", "obcpos04.txt"), 
-                 here::here("data", "obcpos05.txt"), here::here("data", "obcpos06.txt"),  
-                 here::here("data", "obcpos07.txt"), here::here("data", "obcpos08.txt"), 
-                 here::here("data", "obcpos09.txt"), here::here("data", "obcpos10.txt"),
-                 here::here("data", "obcpos11.txt"), here::here("data", "obcpos12.txt"),
-                 here::here("data", "obcpos13.txt"))
-# load pos tagged elements
-obcpos <- sapply(postag.files, function(x) {
-  x <- scan(x, what = "char", sep = "\n", quote = "", quiet = T, skipNul = T)
-  x <- stringr::str_squish(x)
-  x <- str_replace_all(x, fixed("\n"), " ")
-})
-# unlist pos tagged elements
-obcdf$TextPOS <- as.vector(unlist(obcpos))
-```
-
-Save data to disc
-
-```{r ampobc_1_07, message=F, warning=F}
-# save data to disc
-write.table(obcdf, here::here("data", "obcdf_postagged.txt"), sep = "\t", row.names = F, col.names = T)
-obcdf <- read.delim(here::here("data", "obcdf_postagged.txt"), sep = "\t", header = T, skipNul = T)
-```
-
-## Concordancing{-}
-
-```{r ampobc_1_08, message=F, warning=F}
-# extract number of adjs per line
-pstggd <- obcdf$TextPOS
-lpstggd <- strsplit(pstggd, " ")
-nlpstggd <- as.vector(unlist(sapply(lpstggd, function(x){
-  x <- x[grep("[A-Z]{0,1}[a-z]{1,}\\/JJ[A-Z]{0,1}", x)]
-  x <- length(x) } )))
-rp <- nlpstggd
-rp <- ifelse(rp == 0, 1, rp)
-# detach dplyr package (clash with plyr)
-detach("package:dplyr", unload=TRUE)
-# load function for concordancing
-source("D:\\R/ConcR_2.3_loadedfiles.R")
-# set parameters for concordancing
-pattern <- "[A-Z]{0,1}[a-z]{1,}\\/JJ[A-Z]{0,1}"
-context <- 50
-# extract all adjectives (concordance)
-concjjobc <- ConcR(obcdf$TextPOS, pattern, context, all.pre = FALSE)
-# repeat rows in data frame as often as there are adjectives in it 
-# (if 0 adj, repeat once)
-obcadjdf <- obcdf[rep(seq(nrow(obcdf)), rp),]
-# combine data sets
-obcadjdf <- data.frame(1:nrow(obcadjdf), obcadjdf, concjjobc)
-# remove rows without Tokens
-obcadjdf <- obcadjdf[is.na(obcadjdf$Token) == F,]
-# add clean column names
-colnames(obcadjdf)[1] <- "ID"
-# clean adjectives
-obcadjdf$Adjective <- str_replace_all(obcadjdf$Token, "/.*", "")
-# add Variant column
-obcadjdf$Variant <- gsub(".* ", "", str_trim(obcadjdf$PreContext, side = "both")) 
-# inspect data
-head(obcadjdf)
-```
-
-
-
-```{r ampobc_1_09, message=F, warning=F}
-# save raw data to disc
-write.table(obcadjdf, here::here("data", "obcadjdf.txt"), sep = "\t", row.names = F, col.names = T)
-obcadjdf <- read.delim(here::here("data", "obcadjdf.txt"), sep = "\t", header = T, skipNul = T)
-```
-
-## Process sociodemographic data{-}
-
-```{r ampobc_1_10, message=F, warning=F}
-# load files
-bioobc <- read.delim(bioobcpath, sep = "\t", header = F, skipNul = T)
-guideobc <- read.delim(bioguideobc, sep = "\t", header = F, skipNul = T)
-linkobc <- read.delim(biolinkobc, sep = "\t", header = F, skipNul = T)
-extractsobc <- read.delim(bioextractsobc, sep = "\t", header = F, skipNul = T)
-# add column names
-bioobc <- bioobc %>%
-  dplyr::rename(Id = V1, Ethnicity = V2, Gender = V3, Age = V4, 
-                Occupation = V5, Education = V6, L1 = V7) %>%
-  mutate(Gender=replace(Gender, Gender=="F", "Woman")) %>%
-  mutate(Gender=replace(Gender, Gender=="M", "Man"))
-# add column names to guide
-linkobc <- linkobc %>%
-  dplyr::rename(File = V1, Id = V2, Speaker = V3, Words = V4)
-# add column names to extracts
-extractsobc <- extractsobc %>%
-  dplyr::rename(File = V1, WordsFile = V2, Date = V3, Topic = V4, 
-                ExtractMinutes = V5, Minutes = V6)
-# join bioobc and linkobc
-obcspeakerinformation <- dplyr::left_join(bioobc, linkobc, by = "Id")
-obcspeakerinformation <- dplyr::left_join(obcspeakerinformation, extractsobc, by = "File")
-# inspect
-head(obcspeakerinformation)
-```
-
-
-
-```{r ampobc_1_11, message=F, warning=F}
-# add information about type
-obcspeakerinformation <- obcspeakerinformation %>%
-  dplyr::mutate(Type = File) %>%
-  dplyr::mutate(Type = Type %>%
-  str_remove_all("[0-9]{0,}") %>%
-  str_replace_all("MSN", "BroadcastNews") %>%
-  str_replace_all("MST", "BroadcastMonologue") %>%
-  str_replace_all("MSW", "BroadcastWeather") %>%
-  str_replace_all("MUC", "SportsCommentary") %>%
-  str_replace_all("MUJ", "JudgesSummation") %>%
-  str_replace_all("MUL", "Lecture") %>%
-  str_replace_all("MUS", "TeacherMonologue") %>%
-  str_replace_all("DPC", "Conversation") %>%
-  str_replace_all("DPF", "TelephoneConversation") %>%
-  str_replace_all("DPH", "OralHistoryInterview") %>%
-  str_replace_all("DPP", "SocialDialectInterview") %>%
-  str_replace_all("DGB", "RadioTalkback") %>%
-  str_replace_all("DGI", "BroadcastInterview") %>%
-  str_replace_all("DGU", "ParliamentaryDebate") %>%
-  str_replace_all("DGZ", "TransactionsAndMeetings"))
-# inspect speaker information
-head(obcspeakerinformation); nrow(obcspeakerinformation)
-```
-
-
-
-```{r ampobc_1_12, message=F, warning=F}
-# save raw data to disc
-write.table(obcspeakerinformation, here::here("data", "obcspeakerinformation.txt"), sep = "\t", 
-            row.names = F, col.names = T)
-obcspeakerinformation <- read.delim(here::here("data", "obcspeakerinformation.txt"), sep = "\t", 
-                                    header = T, skipNul = T)
-obcadjdf <- read.delim(here::here("data", "obcadjdf.txt"), sep = "\t", header = T, skipNul = T)
-```
-
-## Combine data with biodata{-}
-
-```{r ampobc_1_13, message=F, warning=F}
-# join obcadjdf and obcspeakerinformation
-obc <- join(obcadjdf, obcspeakerinformation, by = c("File", "Speaker"))
-```
 
 ## Frequency{-}
 
 ```{r ampobc_1_14, message=F, warning=F}
 # code freq of adj type by date category
-frqadjtb <- table(obc$Age, obc$Adjective)
-relfreqadjtb <- round(prop.table(frqadjtb, margin = 1)*100, 5)
-relfreqadjdf <- as.data.frame(relfreqadjtb)
-colnames(relfreqadjdf)[1:2] <- c("Age", "Adjective")
-# add freq by date to data
-obcadjdf <- join(obc, relfreqadjdf, by=c("Age", "Adjective"))
-# relabel Freq
-colnames(obcadjdf)[which(colnames(obcadjdf) == "Freq")] <- "Frequency"
-# inspect data
-head(obcadjdf)
+ampobc <- ampobc %>%
+  dplyr::mutate(adjective = tolower(keyword),
+                adjective = str_remove_all(adjective, "_.*"),
+                datecat = date %>%
+                  as.numeric()) %>%
+  dplyr::mutate(datecat = dplyr::case_when(datecat >= 1900 ~ "1900-1999",
+                                           datecat >= 1800 ~ "1800-1899",
+                                           datecat >= 1700 ~ "1700-1799",
+                                           TRUE ~ "1600-1699")) %>%
+  dplyr::group_by(datecat, adjective) %>%
+  dplyr::mutate(adjectiveN = n()) %>%
+  dplyr::group_by(datecat) %>%
+  dplyr::mutate(adjectivesN = n()) %>%
+  dplyr::mutate(frequency = round(adjectiveN/adjectivesN*1000, 5))
+# inspect
+head(ampobc)
 ```
+
 
 Save data to disc
 
-```{r ampobc_1_15, message=F, warning=F}
-# save raw data to disc
-write.table(obcadjdf, here::here("data", "obcadjdf_spk.txt"), sep = "\t", row.names = F, col.names = T)
-obcadjdf <- read.delim(here::here("data", "obcadjdf_spk.txt"), sep = "\t", header = T, skipNul = T)
+```{r ampobc_1_04, message=F, warning=F}
+# save data
+base::saveRDS(ampobc, file = here::here("data", "ampobc_semi.rda"))
+# reload .rda data
+ampobc  <- base::readRDS(file = here::here("data", "ampobc_semi.rda"))
+```
+
+
+
+## Syntactic Function{-}
+
+```{r ampobc_1_17, message=F, warning=F}
+# determine function
+Function1 <- ampobc$post %>%
+  stringr::str_squish() %>%
+  tolower() %>%
+  stringr::str_replace_all(" .*", "") %>%
+  stringr::str_replace_all(".*_n.*", "Attributive") %>%
+  stringr::str_replace_all(fixed("/."), "PUNCT") %>%
+  stringr::str_replace_all(".*PUNCT.*", "Attributive")
+Function2 <-  ampobc$post %>%
+  stringr::str_squish() %>%
+  tolower() %>%
+  stringr::str_replace(" ", "") %>%
+  stringr::str_replace_all(" .*", "") %>%
+  stringr::str_replace_all(".*_n.*", "Attributive") %>%
+  stringr::str_replace_all(fixed("/."), "PUNCT") %>%
+  stringr::str_replace_all(".*PUNCT.*", "Attributive")
+functiontb <- cbind(Function1, Function2)
+# inspect 
+head(functiontb)
 ```
 
 ## Check Amplifiers{-}
@@ -382,102 +228,86 @@ amplifiers <- c("absolutely", "actually", "aggressively", "amazingly", "appallin
                 "wholly", "wicked", "wildly")
 ```
 
-## Syntactic Function{-}
 
 ```{r ampobc_1_17, message=F, warning=F}
-# determine function
-Function1 <- obcadjdf$PostContext %>%
-  stringr::str_trim(side = "both") %>%
-  tolower() %>%
-  stringr::str_replace_all(" {2,}", " ") %>%
-  stringr::str_replace_all(" .*", "") %>%
-  stringr::str_replace_all(" .*", "") %>%
-  stringr::str_replace_all(".*/n.*", "Attributive") %>%
-  stringr::str_replace_all(fixed("/."), "PUNCT") %>%
-  stringr::str_replace_all(".*PUNCT.*", "Attributive")
-Function2 <-  obcadjdf$PostContext %>%
-  stringr::str_trim(side = "both") %>%
-  tolower() %>%
-  stringr::str_replace(" ", "") %>%
-  stringr::str_replace_all(" .*", "") %>%
-  stringr::str_replace_all(".*/n.*", "Attributive") %>%
-  stringr::str_replace_all(fixed("/."), "PUNCT") %>%
-  stringr::str_replace_all(".*PUNCT.*", "Attributive")
-functiontb <- cbind(Function1, Function2)
-obcadjdf$Function <-  as.vector(unlist(apply(functiontb, 1, function(x){
-  x <-   ifelse(x[1] == "" | x[1] == "Attributive" | x[2] == "Attributive", "Attributive", "Predicative")
-})))
-# shorten post Context
-obcadjdf$PostContext <- substr(obcadjdf$PostContext, 1, ifelse((nchar(obcadjdf$PostContext)+25) <25, max(nchar(obcadjdf$PostContext)), 25))
-# pre Context
-obcadjdf$PreContext <- str_trim(obcadjdf$PreContext, side = "both")
-obcadjdf$PreContextLong <- obcadjdf$PreContext
-obcadjdf$PreContextLong <- substr(obcadjdf$PreContextLong, ifelse(nchar(obcadjdf$PreContextLong)-25 <=0, 1, 
-                                                              nchar(obcadjdf$PreContextLong)-25), nchar(obcadjdf$PreContextLong))
-obcadjdf$PreContext <- gsub(".* ", "", obcadjdf$PreContext)
-# amplifier variant
-obcadjdf$PreContext <- gsub("\\/.*", "", obcadjdf$PreContext)
-obcadjdf$Variant <- ifelse(obcadjdf$PreContext %in% amplifiers, obcadjdf$PreContext, "0")
-# amplified y/n
-obcadjdf$Amplified <- ifelse(obcadjdf$Variant == "0", 0, 1) 
-# adjective
-obcadjdf$Adjective <- tolower(obcadjdf$Adjective)
-# inspect data
-nrow(obcadjdf); head(obcadjdf); table(obcadjdf$Variant)
+ampobc <- ampobc %>%
+  dplyr::mutate(Function = dplyr::case_when(Function1 == "" | 
+                                              Function1 == "Attributive" | 
+                                              Function2 == "Attributive" ~ "Attributive",
+                                            FALSE ~ "Predicative")) %>%
+  # extract variant
+  dplyr::mutate(Variant = tolower(pre),
+                Variant = str_remove_all(Variant, ".* "),
+                Variant = str_remove_all(Variant, "_.*"),
+                Variant = ifelse(Variant %in% amplifiers, Variant, "Zero")) %>%
+  # code amplification
+  dplyr::mutate(Amplified = ifelse(Variant == "Zero", 0, 1))
+# inspect
+head(ampobc)
 ```
+
 
 ## Code Priming{-}
 
 ```{r ampobc_1_18, message=F, warning=F}
 # code priming
-prim1 <- c(rep(0, 1), obcadjdf$Variant[1:length(obcadjdf$Variant)-1])
-prim2 <- c(rep(0, 2), obcadjdf$Variant[1:(length(obcadjdf$Variant)-2)])
-prim3 <- c(rep(0, 3), obcadjdf$Variant[1:(length(obcadjdf$Variant)-3)])
-primtb <- cbind(obcadjdf$Variant, prim1, prim2, prim3)
+prim1 <- c(rep(0, 1), ampobc$Variant[1:length(ampobc$Variant)-1])
+prim2 <- c(rep(0, 2), ampobc$Variant[1:(length(ampobc$Variant)-2)])
+prim3 <- c(rep(0, 3), ampobc$Variant[1:(length(ampobc$Variant)-3)])
+primtb <- cbind(ampobc$Variant, prim1, prim2, prim3)
+# inspect
+head(primtb)
+```
 
-obcadjdf$Priming <- as.vector(unlist(apply(primtb, 1, function(x){
-  x <- ifelse(x[1]== "0" , "NoPrime",
+
+```{r ampobc_1_18, message=F, warning=F}
+ampobc$Priming <- as.vector(unlist(apply(primtb, 1, function(x){
+  x <- ifelse(x[1]== "Zero" , "NoPrime",
               ifelse(x[1] == x[2] | x[1] == x[3] | x[1] == x[4], "Prime", "NoPrime"))
 })))
 # define forms that require removal
 sups <- c(".*most.*", ".*more.*") 
 negs <- c(".*not.*", ".*never.*", ".*n't.*")
-downtoners <- c(".*sort/.*", ".*kind/.*", ".* bit/.*", ".*somewhat.*", ".*fairly.*", 
+downtoners <- c(".*sort_.*", ".*kind_.*", ".* bit_.*", ".*somewhat.*", ".*fairly.*", 
                 ".*rather.*", ".*reasonably.*", ".*slightly.*", ".*comparatively.*", ".*semi.*", 
                 ".*relatively.*", ".*little.*", ".*somehow.*", ".*almost.*", ".*partly.*", 
-                ".*hardly.*", ".* less.*", ".*barely.*", ".* just/.*")
+                ".*hardly.*", ".* less.*", ".*barely.*", ".* just_.*")
 specialforms <- c(".* too.*", ".*quite.*")
 PostContextdowntoners <- c(".*enough.*")
 nonpropadj <- c("only", "much", "many", "cheaper", "cheaperr", "bests", "larger",
                 "bst", "better", "bigger")
 # check length of dataset
-str(obcadjdf); head(obcadjdf); nrow(obcadjdf)
+str(ampobc); head(ampobc); nrow(ampobc)
 ```
 
 ## Remove negated forms et al.{-}
 
 ```{r ampobc_1_19, message=F, warning=F}
 # find items to be removed
-supsidx <- unique(grep(paste(sups,collapse="|"), obcadjdf$PreContextLong, value=F))
-negsidx <- unique(grep(paste(negs,collapse="|"), obcadjdf$PreContextLong, value=F))
-downtonersidx <- unique(grep(paste(downtoners,collapse="|"), obcadjdf$PreContextLong, value=F))
-specialformsidx <- unique(grep(paste(specialforms,collapse="|"), obcadjdf$PreContextLong, value=F))
-PostContextdowntonersidx <- unique(grep(paste(PostContextdowntoners,collapse="|"), obcadjdf$PostContext, value=F))
-nonpropadjidx <- unique(grep(paste(nonpropadj,collapse="|"), obcadjdf$Adjective, value=F))
+supsidx <- unique(grep(paste(sups,collapse="|"), ampobc$pre, value=F))
+negsidx <- unique(grep(paste(negs,collapse="|"), ampobc$pre, value=F))
+downtonersidx <- unique(grep(paste(downtoners,collapse="|"), ampobc$pre, value=F))
+specialformsidx <- unique(grep(paste(specialforms,collapse="|"), ampobc$pre, value=F))
+PostContextdowntonersidx <- unique(grep(paste(PostContextdowntoners,collapse="|"), ampobc$PostContext, value=F))
+nonpropadjidx <- unique(grep(paste(nonpropadj,collapse="|"), ampobc$Adjective, value=F))
 # combine indices
 idxs <- unique(c(supsidx, negsidx, downtonersidx, specialformsidx, PostContextdowntonersidx, nonpropadjidx))
 # remove forms that require removal
-obcadjdf <- obcadjdf[-idxs,]
+ampobc <- ampobc[-idxs,]
 # remove empty values
-obcadjdf <- obcadjdf[!obcadjdf$Variant == "", ]
+ampobc <- ampobc[!ampobc$Variant == "", ]
+# inspect
+head(ampobc)
 ```
 
 
+Save data to disc
 
-```{r ampobc_1_20, message=F, warning=F}
-# save raw data to disc
-write.table(obcadjdf, here::here("data", "obcadjdf_wo_neg.txt"), sep = "\t", row.names = F)
-obcadjdf <- read.delim(here::here("data", "obcadjdf_wo_neg.txt"), sep = "\t", header = T, skipNul = T)
+```{r ampobc_1_04, message=F, warning=F}
+# save data
+base::saveRDS(ampobc, file = here::here("data", "ampobc_woneg.rda"))
+# reload .rda data
+ampobc  <- base::readRDS(file = here::here("data", "ampobc_woneg.rda"))
 ```
 
 ## Remove lexicalizations 
@@ -487,36 +317,37 @@ Remove variants that were not intensified by at least 2 different amplifier vari
 > NOT EXECTUTED!
 
 ```{r ampobc_1_21, message=F, warning=F, eval = F}
-nrow(obcadjdf)
+nrow(ampobc)
 # remove items that were not intensified by a minimum of 2 intensifier variants
-pintadjtb <- table(obcadjdf$Adjective, obcadjdf$Variant)
+pintadjtb <- table(ampobc$Adjective, ampobc$Variant)
 #pintadjtb <- pintadjtb[2:nrow(pintadjtb),]
 pintadjtb <- pintadjtb[,2:ncol(pintadjtb)]
 pintadjtb2 <- apply(pintadjtb, 1, function(x){
   x <- ifelse(x > 1, 1, x)})
 pintadjtb3 <- colSums(pintadjtb2)
 pintadjschildes <- names(pintadjtb3)[which(pintadjtb3 >= 2)]
-obcadjdf <- obcadjdf[obcadjdf$Adjective %in% pintadjschildes, ]
-nrow(obcadjdf)
+ampobc <- ampobc[ampobc$Adjective %in% pintadjschildes, ]
+nrow(ampobc)
 ```
 
 ## Remove misspelled forms {-}
 
 ```{r ampobc_1_22, message=F, warning=F, eval = F}
 # inspect adjectives
-names(table(obcadjdf$Adjective))
+names(table(ampobc$adjective))[1:10]
 ```
 
 Remove words not in dictionary or words that consist only of 1 or 2 characters
 
 ```{r ampobc_1_23, message=F, warning=F}
+nrow(ampobc)
 # correct spelling
 library(hunspell)
-obcadjdf <- obcadjdf %>%
-  dplyr::filter(hunspell_check(Adjective)) %>%
-  dplyr::filter(nchar(Adjective) > 2)
+ampobc <- ampobc %>%
+  dplyr::filter(hunspell_check(adjective)) %>%
+  dplyr::filter(nchar(adjective) > 2)
 # inspect
-head(obcadjdf)
+head(ampobc); nrow(ampobc)
 ```
 
 
@@ -525,7 +356,7 @@ head(obcadjdf)
 
 ```{r ampobc_1_24, message=F, warning=F}
 # inspect adjectives
-names(table(obcadjdf$Adjective))
+names(table(ampobc$adjective))[1:10]
 ```
 
 Remove mistagged items
@@ -534,7 +365,7 @@ Remove mistagged items
 library(udpipe)
 #model <- udpipe_download_model(language = "english")
 udmodel_english <- udpipe_load_model(file = here::here("english-ewt-ud-2.5-191206.udpipe"))
-udpipe_adjectives <- udpipe_annotate(udmodel_english, obcadjdf$Adjective) %>%
+udpipe_adjectives <- udpipe_annotate(udmodel_english, ampobc$adjective) %>%
   data.frame() %>%
   dplyr::filter(xpos == "JJ") %>%
   dplyr::pull(sentence)
@@ -543,39 +374,41 @@ head(udpipe_adjectives)
 ```
 
 ```{r ampobc_1_26, message=F, warning=F}
-nrow(obcadjdf)
-obcadjdf <-obcadjdf %>%
-  dplyr::filter(Adjective %in% udpipe_adjectives)
+nrow(ampobc)
+ampobc <-ampobc %>%
+  dplyr::filter(adjective %in% udpipe_adjectives)
 # inspect
-nrow(obcadjdf)
+nrow(ampobc)
 ```
 
 Remove adjectives that were never amplified
 
 
 ```{r ampobc_1_27, message=F, warning=F}
-amp_adjs <- obcadjdf %>%
+amp_adjs <- ampobc %>%
   dplyr::filter(Amplified == 1) %>%
-  dplyr::pull(Adjective) %>%
+  dplyr::pull(adjective) %>%
   table() %>%
   names()
 # inspect
 head(amp_adjs)
 ```
-```{r ampobc_1_28, message=F, warning=F}
-nrow(obcadjdf)
-obcadjdf <- obcadjdf %>%
-  dplyr::filter(Adjective %in% amp_adjs)
-nrow(obcadjdf)
-```
 
+
+```{r ampobc_1_28, message=F, warning=F}
+nrow(ampobc)
+ampobc <- ampobc %>%
+  dplyr::filter(adjective %in% amp_adjs)
+nrow(ampobc)
+```
 
 Save data to disc
 
-```{r ampobc_1_29, message=F, warning=F}
-# save raw data to disc
-write.table(obcadjdf, here::here("data", "obcadjdf_clean.txt"), sep = "\t", row.names = F)
-obcadjdf <- read.delim(here::here("data", "obcadjdf_clean.txt"), sep = "\t", header = T, skipNul = T)
+```{r ampobc_1_04, message=F, warning=F}
+# save data
+base::saveRDS(ampobc, file = here::here("data", "ampobc_clean.rda"))
+# reload .rda data
+ampobc  <- base::readRDS(file = here::here("data", "ampobc_clean.rda"))
 ```
 
 ## Gradability{-}
@@ -584,9 +417,9 @@ obcadjdf <- read.delim(here::here("data", "obcadjdf_clean.txt"), sep = "\t", hea
 # code gradability
 # load Gradability data (derived from COCA)
 gradability <- read.delim(here::here("data", "Gradability.txt"), sep = "\t", header = T, quote = "", skipNul = T)
-obcadjdf$Gradability <- ifelse(obcadjdf$Adjective %in% gradability$Adjective, gradability$Beta, 1)
+ampobc$Gradability <- ifelse(ampobc$adjective %in% gradability$Adjective, gradability$Beta, 1)
 # inspect data
-nrow(obcadjdf); head(obcadjdf)
+nrow(ampobc); head(ampobc)
 ```
 
 ## Semantic Classification{-}
@@ -700,7 +533,7 @@ Value <- AdjectiveSemantics %>%
   dplyr::filter(Value != 0) %>%
   dplyr::pull(Adjective)
 # add semantic category to data
-obcadjdf <- obcadjdf %>%
+ampobc <- ampobc %>%
   dplyr::mutate(SemanticCategory = dplyr::case_when(Adjective %in% Age ~ "Age",
                                                     Adjective %in% Color ~ "Color",
                                                     Adjective %in% Difficulty ~ "Difficulty",
@@ -712,7 +545,7 @@ obcadjdf <- obcadjdf %>%
                                                     Adjective %in% Value ~ "Value", 
                                                     TRUE ~ "Other"))
 # table sem class of tokens
-table(obcadjdf$SemanticCategory)
+table(ampobc$SemanticCategory)
 ```
 
 
@@ -728,19 +561,19 @@ neg_adj <- tidytext::get_sentiments("nrc") %>%
   dplyr::filter(sentiment == "negative") %>%
   dplyr::pull(word)
 # annotate emotionality
-obcadjdf <- obcadjdf %>%
+ampobc <- ampobc %>%
   dplyr::mutate(Emotionality = dplyr::case_when(Adjective %in% pos_adj ~ "positive",
                                                 Adjective %in% neg_adj ~ "negative",
                                                 TRUE ~ "neutral")) %>%
   dplyr::mutate(Emotionality = factor(Emotionality, levels = c("neutral", "negative", "positive")))
 # inspect
-head(obcadjdf)
+head(ampobc)
 ```
 
 ## Correct errors{-}
 
 ```{r ampobc_1_35, message=F, warning=F}
-obcadjdf %>%
+ampobc %>%
   dplyr::filter(Variant == "so") %>%
   dplyr::group_by(Variant, Function) %>%
   dplyr::summarize(Frequency = n())
@@ -748,12 +581,12 @@ obcadjdf %>%
 
 
 ```{r ampobc_1_36, message=F, warning=F}
-obcadjdf <- obcadjdf %>%
+ampobc <- ampobc %>%
   dplyr::mutate(Function = ifelse(Variant == "so" & Function == "Attributive", "Predicative", Function))
 ```
 
 ```{r ampobc_1_37, message=F, warning=F}
-obcadjdf %>%
+ampobc %>%
   dplyr::filter(Variant == "so") %>%
   dplyr::group_by(Variant, Function) %>%
   dplyr::summarize(Frequency = n())
@@ -761,29 +594,33 @@ obcadjdf %>%
 
 ```{r ampobc_1_38, message=F, warning=F}
 # inspect data
-obcadjdf %>%
+ampobc %>%
   head(10) %>%
-  kable(caption = "First 10 rows of obcadjdf.") %>%
+  kable(caption = "First 10 rows of ampobc.") %>%
   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), 
                             full_width = F)
 ```
 
 
-```{r ampobc_1_39, message=F, warning=F}
-# save raw data to disc
-write.table(obcadjdf, here::here("data", "obc_fullclean.txt"), sep = "\t", row.names = F, col.names = T)
+Save data to disc
+
+```{r ampobc_1_04, message=F, warning=F}
+# save data
+base::saveRDS(ampobc, file = here::here("data", "ampobc_fullclean.rda"))
 ```
+
+
 
 
 # Citation & Session Info {-}
 
-Schweinberger, Martin. `r format(Sys.time(), '%Y')`. *On the waning of forms - a corpus-based analysis of losers in language change (Part 1)*. Brisbane: The University of Queensland. url: https://slcladal.github.io/isle6verynze1.html (Version `r format(Sys.time(), '%Y.%m.%d')`).
+Schweinberger, Martin. `r format(Sys.time(), '%Y')`. *Analyzing change in the British English Adjective Amplifier System based on the Old Baily Corpus (Part 1)*. Brisbane: The University of Queensland. url: https://slcladal.github.io/ampobc_dia_part1.html (Version `r format(Sys.time(), '%Y.%m.%d')`).
 
 ```
-@manual{schweinberger`r format(Sys.time(), '%Y')`isle6verynze1,
+@manual{schweinberger`r format(Sys.time(), '%Y')`ampobc1,
   author = {Schweinberger, Martin},
-  title = {On the waning of forms - a corpus-based analysis of losers in language change (Part 1)},
-  note = {https://slcladal.github.io/isle6verynze1.html},
+  title = {Analyzing change in the British English Adjective Amplifier System based on the Old Baily Corpus (Part 1)},
+  note = {https://slcladal.github.io/ampobc_dia_part1.html},
   year = {`r format(Sys.time(), '%Y')`},
   organization = {The University of Queensland, School of Languages and Cultures},
   address = {Brisbane},
