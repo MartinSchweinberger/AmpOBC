@@ -39,10 +39,7 @@ corpusfiles = list.files(path = corpuspath, pattern = ".xml", all.files = T,
                          full.names = T, recursive = F, ignore.case = T, 
                          include.dirs = F)
 # for testing purposes we only use the first 5 files
-corpusfiles <- corpusfiles[1:5]
-```
-
-```{r ampobc_1_01b, message=F, warning=F}
+#corpusfiles <- corpusfiles[1:5]
 head(corpusfiles)
 ```
 
@@ -76,32 +73,15 @@ File
 
 
 ```{r ampobc_1_02, message=F, warning=F}
-# extract speakers
-Speaker <- as.vector(unlist(sapply(obc, function(x) {
-  x <- gsub(">.*", "", x)
-  x <- gsub(".*#", "", x)
-  x <- gsub(".*:", "", x)
-  })))
 # extract raw text
-Text <- as.vector(unlist(sapply(obc, function(x) {
-  x <- gsub("<[A-Z]{1,}#[A-Z]{1,}[0-9]{1,}:[0-9]{1,}:[A-Z]{1,}[0-9]{0,}>", "", x)
-  x <- str_trim(x, side = "both")
-  })))
+Text <- as.vector(unlist(obc))
 # clean text
 CleanText <- Text %>%
-  stringr::str_replace_all("<O> {0,1}[[:alnum:] ]{0,}</O>", " ") %>%
-  stringr::str_replace_all("<&> {0,1}[[:alnum:] ]{0,}[:punct:]{0,}[[:alnum:] ]{0,}</&>", " ") %>%
-  stringr::str_replace_all("</{0,1}[:alnum:]{0,}>", " ") %>%
-  stringr::str_replace_all("<[:punct:]{1,2}[:alnum:]{0,2}>", " ") %>%
-  stringr::str_replace_all("<indig=[:alnum:]{1,}> {0,1}[[:alnum:] ]{0,}</indig=[:alnum:]{1,}>", " ") %>%
-  stringr::str_replace_all(fixed("\""), " ") %>%
-  stringr::str_replace_all("<foreign=[:alnum:]{1,}> {0,1}[[:alnum:] ]{0,}</foreign=[:alnum:]{1,}>", " ") %>%
-  stringr::str_replace_all("<.*>", " ") %>%
+  stringr::str_remove_all(fixed("\\")) %>%
   tolower() %>%
-  stringr::str_replace_all(" {2,}", " ") %>%
-  stringr::str_trim(side = "both")
+  stringr::str_squish()
 # combine elements into a data frame 
-obcdf <- data.frame(File, Speaker, Text, CleanText)
+obcdf <- data.frame(File, Text, CleanText)
 # remove problematic elements
 #obcdf <- obcdf[-grep("\\[", obcdf$CleanText),]
 # remove empty speech units
@@ -113,11 +93,10 @@ Extract word counts
 
 ```{r ampobc_1_03, message=F, warning=F}
 # add wordcount
-wordcount <- obcdf %>%
-  dplyr::mutate(WordCount = str_count(CleanText, " ")+1) %>%
-  dplyr::select(-Text, -CleanText) %>%
-  dplyr::group_by(File, Speaker) %>%
-  dplyr::summarise(Wordcount = sum(WordCount))
+obcdf <- obcdf %>%
+  dplyr::mutate(WordCount = str_count(CleanText, " ")+1)
+# inspect
+colnames(obcdf)
 ```
 
 
@@ -125,7 +104,6 @@ Save data to disc
 
 ```{r ampobc_1_04, message=F, warning=F}
 # save raw data to disc
-write.table(wordcount, here::here("data", "wordcount.txt"), sep = "\t", row.names = F, col.names = T)
 write.table(obcdf, here::here("data", "obcdf_raw.txt"), sep = "\t", row.names = F, col.names = T)
 obcdf <- read.delim(here::here("data", "obcdf_raw.txt"), sep = "\t", header = T, skipNul = T)
 ```
@@ -136,21 +114,19 @@ Split data
 
 ```{r ampobc_1_05, message=F, warning=F}
 # split data into smaller chunks
-pos01 <- obcdf$CleanText[1:10000]
-pos02 <- obcdf$CleanText[10001:20000]
-pos03 <- obcdf$CleanText[20001:22000]
-pos04 <- obcdf$CleanText[22001:23000]
-pos05 <- obcdf$CleanText[23001:24000]
-pos06 <- obcdf$CleanText[24001:25000]
-pos07 <- obcdf$CleanText[25001:30000]
-pos08 <- obcdf$CleanText[30001:40000]
-pos09 <- obcdf$CleanText[40001:50000]
-pos10 <- obcdf$CleanText[50001:60000]
-pos11 <- obcdf$CleanText[60001:70000]
-pos12 <- obcdf$CleanText[70001:80000]
-pos13 <- obcdf$CleanText[80001:90000]
-pos14 <- obcdf$CleanText[90001:100000]
-pos15 <- obcdf$CleanText[100001:nrow(obcdf)]
+pos01 <- obcdf$CleanText[1:100]
+pos02 <- obcdf$CleanText[101:200]
+pos03 <- obcdf$CleanText[201:300]
+pos04 <- obcdf$CleanText[301:400]
+pos05 <- obcdf$CleanText[401:500]
+pos06 <- obcdf$CleanText[501:600]
+pos07 <- obcdf$CleanText[601:700]
+pos08 <- obcdf$CleanText[701:800]
+pos09 <- obcdf$CleanText[801:900]
+pos10 <- obcdf$CleanText[901:1000]
+pos11 <- obcdf$CleanText[1001:1100]
+pos12 <- obcdf$CleanText[1101:1200]
+pos13 <- obcdf$CleanText[1201:nrow(obcdf)]
 ```
 
 Pos-tagging
@@ -211,14 +187,11 @@ writeLines(obcpos12, con = here::here("data", "obcpos12.txt"), sep = "\n", useBy
 obcpos13 <- POStag(object = pos13)
 obcpos13 <- as.vector(unlist(obcpos13))
 writeLines(obcpos13, con = here::here("data", "obcpos13.txt"), sep = "\n", useBytes = FALSE)
-# chunk 14
-obcpos14 <- POStag(object = pos14)
-obcpos14 <- as.vector(unlist(obcpos14))
-writeLines(obcpos14, con = here::here("data", "obcpos14.txt"), sep = "\n", useBytes = FALSE)
-# chunk 15
-obcpos15 <- POStag(object = pos15)
-obcpos15 <- as.vector(unlist(obcpos15))
-writeLines(obcpos15, con = here::here("data", "obcpos15.txt"), sep = "\n", useBytes = FALSE)
+```
+
+
+
+```{r ampobc_1_07, message=F, warning=F}
 # list pos tagged elements
 postag.files = c(here::here("data", "obcpos01.txt"), here::here("data", "obcpos02.txt"), 
                  here::here("data", "obcpos03.txt"), here::here("data", "obcpos04.txt"), 
@@ -226,24 +199,22 @@ postag.files = c(here::here("data", "obcpos01.txt"), here::here("data", "obcpos0
                  here::here("data", "obcpos07.txt"), here::here("data", "obcpos08.txt"), 
                  here::here("data", "obcpos09.txt"), here::here("data", "obcpos10.txt"),
                  here::here("data", "obcpos11.txt"), here::here("data", "obcpos12.txt"),
-                 here::here("data", "obcpos13.txt"), here::here("data", "obcpos14.txt"),
-                 here::here("data", "obcpos15.txt"))
+                 here::here("data", "obcpos13.txt"))
 # load pos tagged elements
 obcpos <- sapply(postag.files, function(x) {
   x <- scan(x, what = "char", sep = "\n", quote = "", quiet = T, skipNul = T)
-  x <- gsub(" {2,}", " ", x)
-  x <- str_trim(x, side = "both")
+  x <- stringr::str_squish(x)
   x <- str_replace_all(x, fixed("\n"), " ")
 })
 # unlist pos tagged elements
-obcdf$TextPOS <- unlist(obcpos)
+obcdf$TextPOS <- as.vector(unlist(obcpos))
 ```
 
 Save data to disc
 
 ```{r ampobc_1_07, message=F, warning=F}
 # save data to disc
-#write.table(obcdf, here::here("data", "obcdf_postagged.txt"), sep = "\t", row.names = F, col.names = T)
+write.table(obcdf, here::here("data", "obcdf_postagged.txt"), sep = "\t", row.names = F, col.names = T)
 obcdf <- read.delim(here::here("data", "obcdf_postagged.txt"), sep = "\t", header = T, skipNul = T)
 ```
 
